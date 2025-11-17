@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MapTiler Map</title>
+  <link href="https://cdn.maptiler.com/maplibre-gl-js/v2.4.0/maplibre-gl.css" rel="stylesheet">
+  <script src="https://cdn.maptiler.com/maplibre-gl-js/v2.4.0/maplibre-gl.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #map {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+    }
+
+    .map-title {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 8px 12px;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      font-weight: 600;
+      z-index: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="map-title">MapTiler demo</div>
+  <div id="map"></div>
+
+  <script>
+    const key = "D7muCTicYZmoW1fGqAk0";
+    let longPressTimer;
+    let longPressCoords = null;
+
+    const map = new maplibregl.Map({
+      container: "map",
+      style: `https://api.maptiler.com/maps/streets-v2/style.json?key=${key}`,
+      center: [0, 0],
+      zoom: 2
+    });
+
+    map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+    function formatAddress(feature) {
+      const p = feature?.properties || {};
+      const parts = [
+        [p.housenumber, p.street].filter(Boolean).join(" ").trim() || null,
+        p.neighbourhood || null,
+        p.city || p.town || p.village || null,
+        p.state || p.region || null,
+        p.postcode || null,
+        p.country || null
+      ].filter(Boolean);
+
+      // Fallbacks if structured fields are missing
+      if (parts.length) return parts.join(", ");
+      return feature?.place_name || "Address not found";
+    }
+
+    async function reverseGeocode(lngLat) {
+      const url = `https://api.maptiler.com/geocoding/${lngLat.lng},${lngLat.lat}.json?type=address&limit=1&key=${key}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Reverse geocoding failed");
+      const data = await res.json();
+      const feature = data.features && data.features[0];
+      return formatAddress(feature);
+    }
+
+    function showPopup(lngLat, text) {
+      new maplibregl.Popup()
+        .setLngLat(lngLat)
+        .setHTML(`<strong>${text}</strong><br>Lat: ${lngLat.lat.toFixed(5)}, Lng: ${lngLat.lng.toFixed(5)}`)
+        .addTo(map);
+    }
+
+    map.on("mousedown", (e) => {
+      longPressTimer = setTimeout(async () => {
+        longPressCoords = e.lngLat;
+        try {
+          const address = await reverseGeocode(longPressCoords);
+          showPopup(longPressCoords, address);
+        } catch (err) {
+          showPopup(longPressCoords, "Unable to retrieve address");
+          console.error(err);
+        }
+      }, 600); // long press threshold (ms)
+    });
+
+    map.on("mouseup", () => {
+      clearTimeout(longPressTimer);
+    });
+
+    map.on("mouseleave", () => {
+      clearTimeout(longPressTimer);
+    });
+  </script>
+</body>
+</html>

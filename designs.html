@@ -291,7 +291,8 @@
 
   <script>
     const API_STORAGE_KEY = "designs-api-base";
-    let apiBase = "";
+    const DEFAULT_API_BASE = "https://landlens.up.railway.app";
+    let apiBase = DEFAULT_API_BASE;
 
     const state = {
       files: [],
@@ -637,7 +638,7 @@
       const params = new URLSearchParams(window.location.search);
       const queryBase = params.get("api");
       const storedBase = localStorage.getItem(API_STORAGE_KEY);
-      const initial = queryBase ?? storedBase ?? "";
+      const initial = queryBase ?? storedBase ?? DEFAULT_API_BASE;
       applyApiBase(initial, false);
     }
 

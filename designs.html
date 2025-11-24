@@ -124,6 +124,37 @@
       color: #d93025;
     }
 
+    .canvas-panel {
+      margin-top: 20px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      background: #f8fafc;
+    }
+
+    .canvas-panel h3 {
+      margin: 0 0 8px 0;
+      font-size: 1rem;
+      color: #1f2937;
+    }
+
+    #shrinkwrapCanvas {
+      width: 100%;
+      max-width: 500px;
+      height: 500px;
+      border-radius: 12px;
+      background: #0f172a;
+      display: block;
+      margin: 0 auto;
+    }
+
+    .canvas-instructions {
+      margin: 8px 0 0;
+      font-size: 0.9rem;
+      color: #334155;
+      text-align: center;
+    }
+
     .list {
       margin: 0;
       padding: 0;
@@ -241,7 +272,7 @@
 
     <section id="shrinkwrapSection">
       <h2>Shrink-wrap & frontage</h2>
-      <p>Select an uploaded file and provide rectangle/front points to generate shrink-wrap data. Paste JSON arrays or enter comma-separated coordinates per line.</p>
+      <p>Select an uploaded file and mark the rectangle + frontage using the visual picker, or paste coordinates manually.</p>
       <form id="shrinkwrapForm">
         <div class="form-grid">
           <label>
@@ -264,6 +295,16 @@
         </div>
         <div id="shrinkwrapStatus" class="status"></div>
       </form>
+
+      <div class="canvas-panel" id="canvasPanel">
+        <h3>Visual picker</h3>
+        <canvas id="shrinkwrapCanvas" width="520" height="520"></canvas>
+        <div class="canvas-instructions" id="canvasInstructions">Select a file to load its footprint preview.</div>
+        <div class="actions" style="margin-top:8px; justify-content:center;">
+          <button type="button" class="btn-secondary" id="resetCanvasBtn">Reset selections</button>
+        </div>
+        <div id="canvasStatus" class="status" style="text-align:center;"></div>
+      </div>
 
       <div id="shrinkwrapResult" class="card hidden" style="margin-top:18px;">
         <header>
@@ -298,7 +339,14 @@
       files: [],
       designs: [],
       previews: {},
-      lastShrinkwrap: null
+      lastShrinkwrap: null,
+      canvas: {
+        footprint: null,
+        transform: null,
+        rectangle: [],
+        frontage: [],
+        file: null
+      }
     };
 
     const elements = {
@@ -314,7 +362,11 @@
       shrinkwrapResultFile: document.getElementById("shrinkwrapResultFile"),
       saveDesignStatus: document.getElementById("saveDesignStatus"),
       shrinkwrapFileSelect: document.getElementById("shrinkwrapFileSelect"),
-      designsList: document.getElementById("designsList")
+      designsList: document.getElementById("designsList"),
+      shrinkwrapCanvas: document.getElementById("shrinkwrapCanvas"),
+      canvasStatus: document.getElementById("canvasStatus"),
+      canvasInstructions: document.getElementById("canvasInstructions"),
+      resetCanvasBtn: document.getElementById("resetCanvasBtn")
     };
 
     function buildUrl(path) {
@@ -457,16 +509,29 @@
       if (current) {
         select.value = current;
       }
+      if (select.value && select.value !== state.canvas.file) {
+        loadCanvasForFile(select.value);
+      }
+    }
+
+    async function fetchPreviewData(filename) {
+      if (!filename) return null;
+      if (state.previews[filename]) return state.previews[filename];
+      const data = await fetchJSON(`/files/${encodeURIComponent(filename)}/preview`);
+      state.previews[filename] = data;
+      return data;
     }
 
     async function previewShrinkwrap(filename) {
       if (!filename) return;
       setStatus(elements.filesStatus, `Previewing shrink-wrap for ${filename}...`);
       try {
-        const data = await fetchJSON(`/files/${encodeURIComponent(filename)}/preview`);
-        state.previews[filename] = data;
+        const data = await fetchPreviewData(filename);
         showPreview(filename, data);
         setStatus(elements.filesStatus, `Preview ready for ${filename}.`);
+        if (elements.shrinkwrapFileSelect.value === filename) {
+          applyPreviewToCanvas(filename, data);
+        }
       } catch (err) {
         console.error(err);
         setStatus(elements.filesStatus, err.message, "error");
@@ -668,12 +733,238 @@
       loadDesigns();
     }
 
+    function setCanvasStatus(message, type = "info") {
+      setStatus(elements.canvasStatus, message, type);
+    }
+
+    function projectPoint(point) {
+      if (!state.canvas.transform) return null;
+      const { padding, scale, minX, minY, height } = state.canvas.transform;
+      const x = padding + (point[0] - minX) * scale;
+      const y = height - (padding + (point[1] - minY) * scale);
+      return [x, y];
+    }
+
+    function unprojectPoint(x, y) {
+      if (!state.canvas.transform) return null;
+      const { padding, scale, minX, minY, height } = state.canvas.transform;
+      const designX = ((x - padding) / scale) + minX;
+      const designY = (((height - y) - padding) / scale) + minY;
+      return [designX, designY];
+    }
+
+    function renderCanvas() {
+      const canvas = elements.shrinkwrapCanvas;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const footprint = state.canvas.footprint;
+      if (Array.isArray(footprint) && footprint.length) {
+        ctx.strokeStyle = "#60a5fa";
+        ctx.fillStyle = "rgba(96,165,250,0.15)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        footprint.forEach((point, index) => {
+          const [x, y] = projectPoint(point) || [];
+          if (index === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "16px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText("Preview data not available", canvas.width / 2, canvas.height / 2);
+      }
+
+      const drawPoints = (points, color) => {
+        ctx.fillStyle = color;
+        points.forEach(([x, y]) => {
+          ctx.beginPath();
+          ctx.arc(x, y, 5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      };
+
+      const rectPoints = state.canvas.rectangle.map(projectPoint).filter(Boolean);
+      if (rectPoints.length) {
+        ctx.strokeStyle = "#fbbf24";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        rectPoints.forEach(([x, y], idx) => {
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        if (rectPoints.length === 3) ctx.closePath();
+        ctx.stroke();
+        drawPoints(rectPoints, "#fbbf24");
+      }
+
+      const frontPoints = state.canvas.frontage.map(projectPoint).filter(Boolean);
+      if (frontPoints.length === 2) {
+        ctx.strokeStyle = "#34d399";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(frontPoints[0][0], frontPoints[0][1]);
+        ctx.lineTo(frontPoints[1][0], frontPoints[1][1]);
+        ctx.stroke();
+        drawPoints(frontPoints, "#34d399");
+      } else if (frontPoints.length === 1) {
+        drawPoints(frontPoints, "#34d399");
+      }
+    }
+
+    function computeCanvasTransform(points) {
+      if (!Array.isArray(points) || !points.length) return null;
+      const xs = points.map((p) => p[0]);
+      const ys = points.map((p) => p[1]);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      const width = maxX - minX || 1;
+      const height = maxY - minY || 1;
+      const padding = 30;
+      const canvas = elements.shrinkwrapCanvas;
+      if (!canvas) return null;
+      const usableWidth = canvas.width - padding * 2;
+      const usableHeight = canvas.height - padding * 2;
+      const scale = Math.min(usableWidth / width, usableHeight / height);
+      return { padding, scale, minX, minY, width: canvas.width, height: canvas.height };
+    }
+
+    async function loadCanvasForFile(filename) {
+      state.canvas.rectangle = [];
+      state.canvas.frontage = [];
+      state.canvas.file = filename || null;
+      updatePointInputsFromCanvas();
+      if (!filename) {
+        state.canvas.footprint = null;
+        state.canvas.transform = null;
+        setCanvasStatus("Select a file to begin.");
+        elements.canvasInstructions.textContent = "Select a file to load its footprint preview.";
+        renderCanvas();
+        return;
+      }
+      setCanvasStatus(`Loading preview for ${filename}...`);
+      try {
+        const data = await fetchPreviewData(filename);
+        applyPreviewToCanvas(filename, data);
+      } catch (err) {
+        console.error(err);
+        setCanvasStatus(err.message, "error");
+        state.canvas.footprint = null;
+        state.canvas.transform = null;
+        renderCanvas();
+      }
+    }
+
+    function applyPreviewToCanvas(filename, data) {
+      if (!data || !Array.isArray(data.footprint_points)) {
+        setCanvasStatus("Preview did not include footprint points.", "error");
+        state.canvas.footprint = null;
+        state.canvas.transform = null;
+        renderCanvas();
+        return;
+      }
+      state.canvas.file = filename;
+      state.canvas.footprint = data.footprint_points;
+      state.canvas.transform = computeCanvasTransform(data.footprint_points);
+      if (Array.isArray(data.rectangle_points) && data.rectangle_points.length >= 3) {
+        state.canvas.rectangle = data.rectangle_points.slice(0, 3);
+      }
+      if (Array.isArray(data.front_points) && data.front_points.length >= 2) {
+        state.canvas.frontage = data.front_points.slice(0, 2);
+      }
+      elements.canvasInstructions.textContent = "Click 3 points for the rectangle, then 2 points for the frontage line.";
+      if (state.canvas.rectangle.length < 3) {
+        setCanvasStatus("Select 3 rectangle corners.");
+      } else if (state.canvas.frontage.length < 2) {
+        setCanvasStatus("Select 2 frontage points.");
+      } else {
+        setCanvasStatus("Selections ready. You can adjust by clicking Reset.");
+      }
+      updatePointInputsFromCanvas();
+      renderCanvas();
+    }
+
+    function updatePointInputsFromCanvas() {
+      const rectInput = document.getElementById("rectanglePointsInput");
+      const frontInput = document.getElementById("frontPointsInput");
+      if (rectInput && state.canvas.rectangle.length) {
+        rectInput.value = JSON.stringify(state.canvas.rectangle, null, 2);
+      }
+      if (frontInput && state.canvas.frontage.length) {
+        frontInput.value = JSON.stringify(state.canvas.frontage, null, 2);
+      }
+    }
+
+    function handleCanvasClick(event) {
+      if (!state.canvas.transform || !state.canvas.file) return;
+      const canvas = elements.shrinkwrapCanvas;
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const designPoint = unprojectPoint(x, y);
+      if (!designPoint) return;
+      const formatted = designPoint.map((value) => Number(value.toFixed(4)));
+      if (state.canvas.rectangle.length < 3) {
+        state.canvas.rectangle.push(formatted);
+        setCanvasStatus(
+          state.canvas.rectangle.length < 3
+            ? `Rectangle point ${state.canvas.rectangle.length}/3`
+            : "Rectangle ready. Now select 2 frontage points."
+        );
+      } else if (state.canvas.frontage.length < 2) {
+        state.canvas.frontage.push(formatted);
+        setCanvasStatus(
+          state.canvas.frontage.length < 2
+            ? "Select one more frontage point."
+            : "Selections ready. You can tweak or submit."
+        );
+      } else {
+        // All points already selected; reset prompt
+        setCanvasStatus("Selections complete. Reset to adjust.");
+        return;
+      }
+      updatePointInputsFromCanvas();
+      renderCanvas();
+    }
+
+    function resetCanvasSelections() {
+      state.canvas.rectangle = [];
+      state.canvas.frontage = [];
+      setCanvasStatus("Selections cleared. Click 3 rectangle points.");
+      const rectInput = document.getElementById("rectanglePointsInput");
+      const frontInput = document.getElementById("frontPointsInput");
+      if (rectInput) rectInput.value = "";
+      if (frontInput) frontInput.value = "";
+      updatePointInputsFromCanvas();
+      renderCanvas();
+    }
+
     document.getElementById("apiForm").addEventListener("submit", handleApiForm);
     document.getElementById("resetApiBtn").addEventListener("click", resetApiBase);
     document.getElementById("uploadForm").addEventListener("submit", handleUpload);
     document.getElementById("refreshFilesBtn").addEventListener("click", loadFiles);
     document.getElementById("shrinkwrapForm").addEventListener("submit", handleShrinkwrap);
     document.getElementById("saveDesignBtn").addEventListener("click", handleSaveDesign);
+    if (elements.shrinkwrapFileSelect) {
+      elements.shrinkwrapFileSelect.addEventListener("change", (event) => {
+        loadCanvasForFile(event.target.value);
+      });
+    }
+    if (elements.shrinkwrapCanvas) {
+      elements.shrinkwrapCanvas.addEventListener("click", handleCanvasClick);
+    }
+    if (elements.resetCanvasBtn) {
+      elements.resetCanvasBtn.addEventListener("click", resetCanvasSelections);
+    }
 
     initApiBase();
     loadFiles();

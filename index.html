@@ -344,6 +344,7 @@
     const LOG_TAIL_DEFAULT = "No log output yet.";
     const LOG_TAIL_UNAVAILABLE = "Log tail unavailable. Use /jobs/{id}/logs.";
     const LOG_TAIL_MAX_LINES = 200;
+    const LOG_TAIL_USELESS_PATTERNS = [/not found/i, /no log/i, /tail unavailable/i];
 
     function setStatus(message, type = "info") {
       if (!message) {
@@ -960,7 +961,11 @@
       const query = `/jobs/${encodeURIComponent(jobId)}/logs?lines=${LOG_TAIL_MAX_LINES}`;
       addLogEntry("GET /jobs/{id}/logs", { id: jobId, lines: LOG_TAIL_MAX_LINES });
       try {
-        return await fetchText(query);
+        const text = await fetchText(query);
+        if (!text || LOG_TAIL_USELESS_PATTERNS.some((pattern) => pattern.test(text))) {
+          return null;
+        }
+        return text;
       } catch (err) {
         console.warn("Log tail fetch error", err);
         addLogEntry("Log tail fetch error", { error: err.message }, "error");

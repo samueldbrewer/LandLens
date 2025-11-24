@@ -789,7 +789,6 @@
         addLogEntry("Geo polling error", { error: err.message }, "error");
       }
     }
-
     function normalizeGeoResponse(payload) {
       if (!payload) return EMPTY_GEOJSON;
       if (payload.type === "FeatureCollection" && Array.isArray(payload.features)) {
@@ -849,30 +848,6 @@
       if (progress.extra?.running) hints.push(`${progress.extra.running} running`);
       if (progress.extra?.remaining) hints.push(`${progress.extra.remaining} remaining`);
       return hints.length ? hints.join(", ") : "no queue";
-    }
-        if (data?.type === "FeatureCollection") {
-          updateJobSource(data);
-          const featureCount = Array.isArray(data.features) ? data.features.length : 0;
-          const progress =
-            data?.properties?.progress ||
-            data?.metadata?.progress ||
-            data?.progress ||
-            null;
-          if (progress && typeof progress === "object") {
-            updateJobMeta(
-              `Parcels: ${featureCount} · Progress ${progress.completed ?? progress.done ?? "?"}/${
-                progress.total ?? progress.expected ?? "?"
-              }`
-            );
-          } else {
-            updateJobMeta(`Parcels returned: ${featureCount}`);
-          }
-          addLogEntry("Geo update", { featureCount, progress });
-        }
-      } catch (err) {
-        console.warn("Geo polling error", err);
-        addLogEntry("Geo polling error", { error: err.message }, "error");
-      }
     }
 
     function finalizeJob(message) {

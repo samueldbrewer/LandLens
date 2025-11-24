@@ -339,9 +339,11 @@
       files: [],
       designs: [],
       previews: {},
+      geometries: {},
       lastShrinkwrap: null,
       canvas: {
         footprint: null,
+        shapes: [],
         transform: null,
         rectangle: [],
         frontage: [],
@@ -519,6 +521,14 @@
       if (state.previews[filename]) return state.previews[filename];
       const data = await fetchJSON(`/files/${encodeURIComponent(filename)}/preview`);
       state.previews[filename] = data;
+      return data;
+    }
+
+    async function fetchGeometryData(filename) {
+      if (!filename) return null;
+      if (state.geometries[filename]) return state.geometries[filename];
+      const data = await fetchJSON(`/files/${encodeURIComponent(filename)}/geometry`);
+      state.geometries[filename] = data;
       return data;
     }
 
@@ -737,6 +747,61 @@
       setStatus(elements.canvasStatus, message, type);
     }
 
+    function isValidPoint(point) {
+      if (!point) return false;
+      if (Array.isArray(point) && point.length >= 2) {
+        return Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1]));
+      }
+      if (typeof point === "object" && ("x" in point || "y" in point)) {
+        return Number.isFinite(Number(point.x ?? point.X)) && Number.isFinite(Number(point.y ?? point.Y));
+      }
+      return false;
+    }
+
+    function toPointArray(point) {
+      if (!isValidPoint(point)) return null;
+      if (Array.isArray(point)) {
+        return [Number(point[0]), Number(point[1])];
+      }
+      return [Number(point.x ?? point.X ?? point.lon ?? point.longitude ?? 0), Number(point.y ?? point.Y ?? point.lat ?? point.latitude ?? 0)];
+    }
+
+    function normalizeGeometryShapes(payload) {
+      if (!payload) return [];
+      const candidateSets = [
+        payload.polylines,
+        payload.paths,
+        payload.lines,
+        payload.geometry,
+        payload
+      ];
+      const firstArray = candidateSets.find((item) => Array.isArray(item));
+      if (!Array.isArray(firstArray)) return [];
+      return firstArray
+        .map((path) => {
+          if (Array.isArray(path?.points)) return path.points;
+          if (Array.isArray(path)) return path;
+          if (typeof path === "object" && Array.isArray(path.coordinates)) return path.coordinates;
+          return null;
+        })
+        .filter(Boolean)
+        .map((path) => path.map(toPointArray).filter(Boolean))
+        .filter((path) => path.length >= 2);
+    }
+
+    function flattenPoints(shapes) {
+      if (!Array.isArray(shapes)) return [];
+      const result = [];
+      shapes.forEach((shape) => {
+        if (!Array.isArray(shape)) return;
+        shape.forEach((point) => {
+          const normalized = toPointArray(point);
+          if (normalized) result.push(normalized);
+        });
+      });
+      return result;
+    }
+
     function projectPoint(point) {
       if (!state.canvas.transform) return null;
       const { padding, scale, minX, minY, height } = state.canvas.transform;
@@ -775,6 +840,18 @@
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+      } else if (Array.isArray(state.canvas.shapes) && state.canvas.shapes.length) {
+        ctx.strokeStyle = "#94a3b8";
+        ctx.lineWidth = 1.5;
+        state.canvas.shapes.forEach((shape) => {
+          ctx.beginPath();
+          shape.forEach((point, index) => {
+            const [x, y] = projectPoint(point) || [];
+            if (index === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+        });
       } else {
         ctx.fillStyle = "#94a3b8";
         ctx.font = "16px system-ui";
@@ -821,8 +898,12 @@
 
     function computeCanvasTransform(points) {
       if (!Array.isArray(points) || !points.length) return null;
-      const xs = points.map((p) => p[0]);
-      const ys = points.map((p) => p[1]);
+      const valid = points
+        .map((point) => (Array.isArray(point) ? point : toPointArray(point)))
+        .filter((point) => Array.isArray(point) && point.length >= 2 && Number.isFinite(point[0]) && Number.isFinite(point[1]));
+      if (!valid.length) return null;
+      const xs = valid.map((p) => p[0]);
+      const ys = valid.map((p) => p[1]);
       const minX = Math.min(...xs);
       const maxX = Math.max(...xs);
       const minY = Math.min(...ys);
@@ -841,6 +922,7 @@
     async function loadCanvasForFile(filename) {
       state.canvas.rectangle = [];
       state.canvas.frontage = [];
+       state.canvas.shapes = [];
       state.canvas.file = filename || null;
       updatePointInputsFromCanvas();
       if (!filename) {
@@ -857,8 +939,17 @@
         applyPreviewToCanvas(filename, data);
       } catch (err) {
         console.error(err);
-        setCanvasStatus(err.message, "error");
+        setCanvasStatus(`Preview unavailable: ${err.message}`, "error");
+        try {
+          const geometry = await fetchGeometryData(filename);
+          const applied = applyGeometryToCanvas(filename, geometry);
+          if (applied) return;
+        } catch (geoErr) {
+          console.error(geoErr);
+          setCanvasStatus(`Geometry fallback failed: ${geoErr.message}`, "error");
+        }
         state.canvas.footprint = null;
+        state.canvas.shapes = [];
         state.canvas.transform = null;
         renderCanvas();
       }
@@ -874,6 +965,7 @@
       }
       state.canvas.file = filename;
       state.canvas.footprint = data.footprint_points;
+      state.canvas.shapes = [state.canvas.footprint];
       state.canvas.transform = computeCanvasTransform(data.footprint_points);
       if (Array.isArray(data.rectangle_points) && data.rectangle_points.length >= 3) {
         state.canvas.rectangle = data.rectangle_points.slice(0, 3);
@@ -891,6 +983,24 @@
       }
       updatePointInputsFromCanvas();
       renderCanvas();
+    }
+
+    function applyGeometryToCanvas(filename, geometryData) {
+      const shapes = normalizeGeometryShapes(geometryData);
+      if (!shapes.length) {
+        setCanvasStatus("Geometry endpoint returned no usable paths.", "error");
+        return false;
+      }
+      state.canvas.file = filename;
+      state.canvas.footprint = null;
+      state.canvas.shapes = shapes;
+      const pointsForTransform = flattenPoints(shapes);
+      state.canvas.transform = computeCanvasTransform(pointsForTransform);
+      elements.canvasInstructions.textContent = "Preview unavailable; using geometry fallback. Click 3 rectangle points, then 2 frontage points.";
+      setCanvasStatus("Preview unavailable; using geometry fallback.");
+      updatePointInputsFromCanvas();
+      renderCanvas();
+      return true;
     }
 
     function updatePointInputsFromCanvas() {

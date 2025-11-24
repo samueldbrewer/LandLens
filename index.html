@@ -200,6 +200,38 @@
       margin-top: 4px;
     }
 
+    .monitoring-section ul {
+      padding-left: 18px;
+      margin: 6px 0 0;
+      color: #475569;
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+
+    .monitoring-section strong {
+      color: #0f172a;
+    }
+
+    .log-tail-label {
+      margin-top: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #0f172a;
+    }
+
+    .log-tail {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 6px;
+      padding: 8px;
+      font-size: 0.78rem;
+      line-height: 1.35;
+      max-height: 150px;
+      overflow-y: auto;
+      margin-top: 4px;
+      white-space: pre-wrap;
+    }
+
     @media (max-width: 640px) {
       .control-panel {
         width: calc(100% - 24px);
@@ -239,6 +271,18 @@
       <div class="panel-actions">
         <button id="cancelJobBtn" class="btn-secondary" type="button" disabled>Cancel active job</button>
       </div>
+    </div>
+    <div class="panel-section monitoring-section">
+      <div>
+        <strong>Monitoring tips</strong>
+        <ul>
+          <li>Use <code>/jobs/{id}</code> for status + <em>log_tail</em> to ensure the worker is active.</li>
+          <li><code>/jobs/{id}/geo</code> fills once parcels finish a cycle — empty GeoJSON usually means the run is still queued or underway.</li>
+          <li>Cancel stuck runs via <code>/jobs/{id}/cancel</code> after confirming the log tail is idle.</li>
+        </ul>
+      </div>
+      <div class="log-tail-label">Latest worker log tail</div>
+      <pre id="logTail" class="log-tail">No log output yet.</pre>
     </div>
     <div class="panel-section log-section">
       <div class="log-header">
@@ -283,7 +327,8 @@
       jobMetaText: document.getElementById("jobMetaText"),
       cancelJobBtn: document.getElementById("cancelJobBtn"),
       clearLogBtn: document.getElementById("clearLogBtn"),
-      logFeed: document.getElementById("logFeed")
+      logFeed: document.getElementById("logFeed"),
+      logTail: document.getElementById("logTail")
     };
 
     const appState = {
@@ -397,6 +442,22 @@
     function clearLog() {
       appState.logs = [];
       renderLog();
+    }
+
+    function normalizeLogTail(tail) {
+      if (!tail) return "";
+      if (Array.isArray(tail)) return tail.join("\n");
+      if (typeof tail === "object") {
+        return Object.entries(tail)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join("\n");
+      }
+      return String(tail);
+    }
+
+    function updateLogTail(tailText) {
+      if (!ui.logTail) return;
+      ui.logTail.textContent = tailText || "No log output yet.";
     }
 
     window.addEventListener("error", (event) => {
@@ -756,6 +817,8 @@
       return ["done", "complete", "completed", "finished", "failed", "error", "cancelled", "canceled"].includes(normalized);
     }
 
+    const MAX_LOG_TAIL_CHARS = 1600;
+
     async function fetchJobStatus() {
       if (!appState.job) return;
       addLogEntry("GET /jobs/{id}", { id: appState.job.id });
@@ -764,6 +827,10 @@
         const status = data?.status || appState.job.status;
         appState.job.status = status;
         updateJobStatus(`Job ${status}...`);
+        if (data?.log_tail) {
+          const formattedTail = normalizeLogTail(data.log_tail).slice(-MAX_LOG_TAIL_CHARS);
+          updateLogTail(formattedTail);
+        }
         addLogEntry("Job status response", data);
         if (isTerminalStatus(status)) {
           finalizeJob(`Job ${status}.`);
@@ -869,6 +936,7 @@
       updateJobStatus(message || "Job finished.");
       addLogEntry("Job finalized", { message });
       appState.job = null;
+      updateLogTail("");
     }
 
     function abortOngoingApiCalls() {
@@ -892,6 +960,7 @@
       setControlsDisabled(false);
       ui.cancelJobBtn.disabled = true;
       updateJobSource(EMPTY_GEOJSON);
+      updateLogTail("");
     }
 
     function sendCancellationSignal(jobId, reason) {
@@ -988,6 +1057,7 @@
     });
 
     renderLog();
+    updateLogTail("");
     initMap();
     loadDesigns();
     updateJobStatus("Select a design, then click the map.");

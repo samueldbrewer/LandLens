@@ -341,6 +341,9 @@
       logs: []
     };
     const LOG_LIMIT = 200;
+    const LOG_TAIL_DEFAULT = "No log output yet.";
+    const LOG_TAIL_UNAVAILABLE = "Log tail unavailable. Use /jobs/{id}/logs.";
+    const LOG_TAIL_MAX_LINES = 200;
 
     function setStatus(message, type = "info") {
       if (!message) {
@@ -455,9 +458,10 @@
       return String(tail);
     }
 
-    function updateLogTail(tailText) {
+    function updateLogTail(tailText, fallback = LOG_TAIL_DEFAULT) {
       if (!ui.logTail) return;
-      ui.logTail.textContent = tailText || "No log output yet.";
+      const text = tailText && tailText.trim().length ? tailText : fallback;
+      ui.logTail.textContent = text;
     }
 
     window.addEventListener("error", (event) => {
@@ -649,6 +653,27 @@
       }
     }
 
+    async function fetchText(path, options = {}) {
+      const controller = new AbortController();
+      const signal = options.signal || controller.signal;
+      const fetchOptions = { ...options, signal };
+      if (!options.signal) {
+        appState.abortControllers.add(controller);
+      }
+      try {
+        const response = await fetch(`${API_BASE}${path}`, fetchOptions);
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(body || response.statusText || `Request failed (${response.status})`);
+        }
+        return response.text();
+      } finally {
+        if (!options.signal) {
+          appState.abortControllers.delete(controller);
+        }
+      }
+    }
+
     async function loadDesigns() {
       setDesignStatus("Loading designs...");
       addLogEntry("GET /designs", null);
@@ -830,6 +855,9 @@
         if (data?.log_tail) {
           const formattedTail = normalizeLogTail(data.log_tail).slice(-MAX_LOG_TAIL_CHARS);
           updateLogTail(formattedTail);
+        } else {
+          const fallbackTail = await fetchJobLogs(appState.job.id);
+          updateLogTail(fallbackTail, LOG_TAIL_UNAVAILABLE);
         }
         addLogEntry("Job status response", data);
         if (isTerminalStatus(status)) {
@@ -927,6 +955,19 @@
       return hints.length ? hints.join(", ") : "no queue";
     }
 
+    async function fetchJobLogs(jobId) {
+      if (!jobId) return null;
+      const query = `/jobs/${encodeURIComponent(jobId)}/logs?lines=${LOG_TAIL_MAX_LINES}`;
+      addLogEntry("GET /jobs/{id}/logs", { id: jobId, lines: LOG_TAIL_MAX_LINES });
+      try {
+        return await fetchText(query);
+      } catch (err) {
+        console.warn("Log tail fetch error", err);
+        addLogEntry("Log tail fetch error", { error: err.message }, "error");
+        return null;
+      }
+    }
+
     function finalizeJob(message) {
       clearJobPolling();
       abortOngoingApiCalls();
@@ -936,7 +977,7 @@
       updateJobStatus(message || "Job finished.");
       addLogEntry("Job finalized", { message });
       appState.job = null;
-      updateLogTail("");
+      updateLogTail("", LOG_TAIL_DEFAULT);
     }
 
     function abortOngoingApiCalls() {
@@ -960,7 +1001,7 @@
       setControlsDisabled(false);
       ui.cancelJobBtn.disabled = true;
       updateJobSource(EMPTY_GEOJSON);
-      updateLogTail("");
+      updateLogTail("", LOG_TAIL_DEFAULT);
     }
 
     function sendCancellationSignal(jobId, reason) {
@@ -1057,7 +1098,7 @@
     });
 
     renderLog();
-    updateLogTail("");
+    updateLogTail("", LOG_TAIL_DEFAULT);
     initMap();
     loadDesigns();
     updateJobStatus("Select a design, then click the map.");

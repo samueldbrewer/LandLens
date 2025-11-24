@@ -64,17 +64,10 @@
 
   <script>
     const key = "D7muCTicYZmoW1fGqAk0";
+    const styleUrl = `https://api.maptiler.com/maps/streets-v2/style.json?key=${key}`;
+    let map;
     let longPressTimer;
     let longPressCoords = null;
-
-    const map = new maplibregl.Map({
-      container: "map",
-      style: `https://api.maptiler.com/maps/streets-v2/style.json?key=${key}`,
-      center: [0, 0],
-      zoom: 2
-    });
-
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
 
     const statusEl = document.getElementById("status");
 
@@ -90,18 +83,57 @@
       console[type === "error" ? "error" : "log"]("[Map status]", message);
     }
 
-    setStatus("Loading map...");
-
-    map.on("load", () => {
-      setStatus("");
+    window.addEventListener("error", (event) => {
+      if (!event?.message) return;
+      setStatus(`JS error: ${event.message}`, "error");
     });
 
-    map.on("error", (event) => {
-      if (!event?.error) return;
-      const msg = event.error.message || "Unknown map error";
-      // Shorten MapTiler token errors for clarity
-      setStatus(`Map error: ${msg}`, "error");
+    window.addEventListener("unhandledrejection", (event) => {
+      const reason = event?.reason?.message || event?.reason || "Unknown rejection";
+      setStatus(`Promise rejection: ${reason}`, "error");
     });
+
+    async function initMap() {
+      setStatus("Checking MapTiler style...");
+      let styleJSON;
+      try {
+        const response = await fetch(styleUrl);
+        if (!response.ok) {
+          throw new Error(`Style fetch failed (${response.status})`);
+        }
+        styleJSON = await response.json();
+      } catch (err) {
+        setStatus(`Unable to load style: ${err.message}`, "error");
+        return;
+      }
+
+      setStatus("Initializing map...");
+      map = new maplibregl.Map({
+        container: "map",
+        style: styleJSON,
+        center: [0, 0],
+        zoom: 2
+      });
+
+      map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+      map.on("load", () => {
+        setStatus("");
+      });
+
+      map.on("error", (event) => {
+        const err = event?.error;
+        if (!err) return;
+        const msg = err.status
+          ? `${err.status} ${err.statusText || ""}`.trim()
+          : err.message || "Unknown map error";
+        setStatus(`Map error: ${msg}`, "error");
+      });
+
+      attachLongPressHandler();
+    }
+
+    initMap();
 
     function formatAddress(feature) {
       const p = feature?.properties || {};
@@ -135,27 +167,31 @@
         .addTo(map);
     }
 
-    map.on("mousedown", (e) => {
-      longPressTimer = setTimeout(async () => {
-        longPressCoords = e.lngLat;
-        try {
-          const address = await reverseGeocode(longPressCoords);
-          showPopup(longPressCoords, address);
-        } catch (err) {
-          setStatus(`Reverse geocode failed: ${err.message}`, "error");
-          showPopup(longPressCoords, "Unable to retrieve address");
-          console.error(err);
-        }
-      }, 600); // long press threshold (ms)
-    });
+    function attachLongPressHandler() {
+      if (!map) return;
 
-    map.on("mouseup", () => {
-      clearTimeout(longPressTimer);
-    });
+      map.on("mousedown", (e) => {
+        longPressTimer = setTimeout(async () => {
+          longPressCoords = e.lngLat;
+          try {
+            const address = await reverseGeocode(longPressCoords);
+            showPopup(longPressCoords, address);
+          } catch (err) {
+            setStatus(`Reverse geocode failed: ${err.message}`, "error");
+            showPopup(longPressCoords, "Unable to retrieve address");
+            console.error(err);
+          }
+        }, 600); // long press threshold (ms)
+      });
 
-    map.on("mouseleave", () => {
-      clearTimeout(longPressTimer);
-    });
+      map.on("mouseup", () => {
+        clearTimeout(longPressTimer);
+      });
+
+      map.on("mouseleave", () => {
+        clearTimeout(longPressTimer);
+      });
+    }
   </script>
 </body>
 </html>

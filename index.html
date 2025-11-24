@@ -23,7 +23,6 @@
       left: 0;
     }
 
-    .map-title,
     .status-banner {
       position: absolute;
       background: rgba(255, 255, 255, 0.94);
@@ -32,11 +31,6 @@
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       font-weight: 600;
       z-index: 1;
-    }
-
-    .map-title {
-      top: 12px;
-      left: 12px;
     }
 
     .status-banner {
@@ -55,23 +49,189 @@
     .status-banner.hidden {
       display: none;
     }
+
+    .control-panel {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      max-width: 360px;
+      width: calc(100% - 160px);
+      background: rgba(255, 255, 255, 0.96);
+      border-radius: 10px;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.15);
+      padding: 14px 16px 18px;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+    }
+
+    .panel-section h1 {
+      font-size: 1.2rem;
+      margin: 0;
+      color: #0f172a;
+    }
+
+    .panel-section p {
+      margin: 4px 0 0;
+      color: #475569;
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+
+    .panel-section label {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #0f172a;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .panel-section select,
+    .panel-section button {
+      font-family: inherit;
+      font-size: 0.95rem;
+      border-radius: 8px;
+      border: 1px solid #cbd5f5;
+      padding: 8px 10px;
+    }
+
+    .panel-section select {
+      background: #fff;
+    }
+
+    .panel-section button {
+      border: none;
+      background: #2563eb;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .panel-section button:hover {
+      background: #1e4fd6;
+    }
+
+    .panel-section button:disabled,
+    .panel-section select:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+
+    .panel-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .panel-status {
+      font-size: 0.85rem;
+      color: #475569;
+    }
+
+    .panel-status.error {
+      color: #d93025;
+    }
+
+    .job-status {
+      font-weight: 600;
+      color: #0f172a;
+    }
+
+    .job-meta {
+      font-size: 0.85rem;
+      color: #475569;
+      margin-top: 4px;
+    }
+
+    @media (max-width: 640px) {
+      .control-panel {
+        width: calc(100% - 24px);
+      }
+
+      .panel-actions {
+        flex-direction: column;
+      }
+
+      .panel-section button {
+        width: 100%;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="map-title">MapTiler demo</div>
+  <div class="control-panel">
+    <div class="panel-section">
+      <h1>Land Lens Runner</h1>
+      <p>Select a saved shrink-wrap, then click a spot on the map to start a crawl.</p>
+    </div>
+    <div class="panel-section">
+      <label>
+        Shrink-wrap design
+        <select id="designSelect">
+          <option value="">Loading designs…</option>
+        </select>
+      </label>
+      <div class="panel-actions">
+        <button id="refreshDesignsBtn" type="button">Refresh designs</button>
+      </div>
+      <div id="designStatus" class="panel-status"></div>
+    </div>
+    <div class="panel-section">
+      <div id="jobStatusText" class="job-status">Select a design, then click the map.</div>
+      <div id="jobMetaText" class="job-meta"></div>
+      <div class="panel-actions">
+        <button id="cancelJobBtn" class="btn-secondary" type="button" disabled>Cancel active job</button>
+      </div>
+    </div>
+  </div>
   <div id="status" class="status-banner hidden"></div>
   <div id="map"></div>
 
   <script>
     const key = "CBo7orMIbQ1XA33zeKV8";
     const styleUrl = `https://api.maptiler.com/maps/streets-v2/style.json?key=${key}`;
+    const API_BASE = "https://landlens.up.railway.app";
+    const JOB_SOURCE_ID = "job-parcels";
+    const JOB_FILL_LAYER_ID = "job-parcels-fill";
+    const JOB_LINE_LAYER_ID = "job-parcels-outline";
+    const JOB_STATUS_POLL_MS = 5000;
+    const JOB_GEO_POLL_MS = 4000;
+    const EMPTY_GEOJSON = { type: "FeatureCollection", features: [] };
+
     maplibregl.workerUrl = "./maplibre-gl-csp-worker.js";
     maplibregl.workerCount = 2;
     let map;
     let longPressTimer;
     let longPressCoords = null;
+    let suppressNextClick = false;
 
     const statusEl = document.getElementById("status");
+    const ui = {
+      designSelect: document.getElementById("designSelect"),
+      designStatus: document.getElementById("designStatus"),
+      refreshDesignsBtn: document.getElementById("refreshDesignsBtn"),
+      jobStatusText: document.getElementById("jobStatusText"),
+      jobMetaText: document.getElementById("jobMetaText"),
+      cancelJobBtn: document.getElementById("cancelJobBtn")
+    };
+
+    const appState = {
+      designs: [],
+      selectedDesign: null,
+      job: null,
+      pollTimers: { status: null, geo: null },
+      abortControllers: new Set(),
+      jobMarker: null
+    };
 
     function setStatus(message, type = "info") {
       if (!message) {
@@ -83,6 +243,29 @@
       statusEl.classList.remove("hidden");
       statusEl.classList.toggle("error", type === "error");
       console[type === "error" ? "error" : "log"]("[Map status]", message);
+    }
+
+    function setDesignStatus(message, type = "info") {
+      if (!ui.designStatus) return;
+      ui.designStatus.textContent = message || "";
+      ui.designStatus.classList.toggle("error", type === "error");
+    }
+
+    function updateJobStatus(message, type = "info") {
+      if (!ui.jobStatusText) return;
+      ui.jobStatusText.textContent = message || "";
+      ui.jobStatusText.style.color = type === "error" ? "#d93025" : "#0f172a";
+    }
+
+    function updateJobMeta(message) {
+      if (!ui.jobMetaText) return;
+      ui.jobMetaText.textContent = message || "";
+    }
+
+    function setControlsDisabled(disabled) {
+      ui.designSelect.disabled = disabled;
+      ui.refreshDesignsBtn.disabled = disabled;
+      ui.cancelJobBtn.disabled = !disabled;
     }
 
     window.addEventListener("error", (event) => {
@@ -175,7 +358,6 @@
 
       const tileAccessOk = await verifyTileAccess(styleJSON);
       if (!tileAccessOk) {
-        // Still init map so interactions can continue for debugging
         console.warn("Continuing without tile access.");
       }
 
@@ -184,7 +366,7 @@
         container: "map",
         style: styleJSON,
         center: [0, 0],
-        zoom: 2
+        zoom: 3
       });
 
       map.addControl(new maplibregl.NavigationControl(), "top-right");
@@ -196,6 +378,9 @@
       map.on("load", () => {
         clearTimeout(loadTimeout);
         setStatus("Map style loaded, waiting for tiles...");
+        initializeJobLayers();
+        attachLongPressHandler();
+        map.on("click", handleMapClick);
       });
 
       map.on("idle", () => {
@@ -210,11 +395,321 @@
           : err.message || "Unknown map error";
         setStatus(`Map error: ${msg}`, "error");
       });
-
-      attachLongPressHandler();
     }
 
-    initMap();
+    function initializeJobLayers() {
+      if (!map || map.getSource(JOB_SOURCE_ID)) return;
+      map.addSource(JOB_SOURCE_ID, {
+        type: "geojson",
+        data: EMPTY_GEOJSON
+      });
+      map.addLayer({
+        id: JOB_FILL_LAYER_ID,
+        type: "fill",
+        source: JOB_SOURCE_ID,
+        paint: {
+          "fill-color": "#4f46e5",
+          "fill-opacity": 0.22
+        }
+      });
+      map.addLayer({
+        id: JOB_LINE_LAYER_ID,
+        type: "line",
+        source: JOB_SOURCE_ID,
+        paint: {
+          "line-color": "#3730a3",
+          "line-width": 2
+        }
+      });
+    }
+
+    function updateJobSource(data) {
+      if (!map) return;
+      const source = map.getSource(JOB_SOURCE_ID);
+      if (source) {
+        source.setData(data || EMPTY_GEOJSON);
+      }
+    }
+
+    async function fetchJSON(path, options = {}) {
+      const controller = new AbortController();
+      const signal = options.signal || controller.signal;
+      const headers = options.headers ? { ...options.headers } : {};
+      if (options.body && !(options.body instanceof FormData) && !headers["Content-Type"]) {
+        headers["Content-Type"] = "application/json";
+      }
+      const fetchOptions = { ...options, headers, signal };
+      if (!options.signal) {
+        appState.abortControllers.add(controller);
+      }
+      try {
+        const response = await fetch(`${API_BASE}${path}`, fetchOptions);
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(body || response.statusText || `Request failed (${response.status})`);
+        }
+        if (response.status === 204) return null;
+        return response.json();
+      } finally {
+        if (!options.signal) {
+          appState.abortControllers.delete(controller);
+        }
+      }
+    }
+
+    async function loadDesigns() {
+      setDesignStatus("Loading designs...");
+      try {
+        const payload = await fetchJSON("/designs");
+        const designs = Array.isArray(payload) ? payload : payload?.designs || [];
+        appState.designs = designs;
+        populateDesignSelect();
+        setDesignStatus(`Loaded ${designs.length} design${designs.length === 1 ? "" : "s"}.`);
+      } catch (err) {
+        console.error(err);
+        setDesignStatus(`Failed to load designs: ${err.message}`, "error");
+      }
+    }
+
+    function populateDesignSelect() {
+      const select = ui.designSelect;
+      if (!select) return;
+      const current = select.value;
+      select.innerHTML = '<option value="">-- Choose a shrink-wrap --</option>';
+      appState.designs.forEach((design, index) => {
+        const option = document.createElement("option");
+        option.value = design.slug || design.id || design.name || `design-${index}`;
+        option.textContent = design.name || design.slug || `Design ${index + 1}`;
+        option.dataset.index = index;
+        select.appendChild(option);
+      });
+      select.value = current && Array.from(select.options).some((opt) => opt.value === current) ? current : "";
+      handleDesignChange();
+    }
+
+    function handleDesignChange() {
+      const select = ui.designSelect;
+      if (!select) return;
+      const option = select.selectedOptions[0];
+      if (!option || !option.dataset.index) {
+        appState.selectedDesign = null;
+        updateJobStatus("Select a design, then click the map.");
+        updateJobMeta("");
+        return;
+      }
+      const design = appState.designs[Number(option.dataset.index)];
+      appState.selectedDesign = design;
+      updateJobStatus(`"${design.name || "Design"}" ready. Click the map to launch a crawl.`);
+      const footprintCount = design?.footprint_points?.length || 0;
+      updateJobMeta(
+        `${footprintCount} footprint points · Front direction: ${
+          design?.front_direction ? JSON.stringify(design.front_direction) : "auto"
+        }`
+      );
+    }
+
+    async function handleMapClick(event) {
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        return;
+      }
+      if (!appState.selectedDesign) {
+        updateJobStatus("Pick a shrink-wrap before launching a crawl.", "error");
+        return;
+      }
+      if (appState.job) {
+        updateJobStatus("A job is already running. Wait or cancel it first.", "error");
+        return;
+      }
+      startJobAtPoint(event.lngLat);
+    }
+
+    async function startJobAtPoint(lngLat) {
+      const design = appState.selectedDesign;
+      if (!design) return;
+      setControlsDisabled(true);
+      updateJobSource(EMPTY_GEOJSON);
+      updateJobMeta("");
+      updateJobStatus("Preparing job...");
+      let address;
+      try {
+        address = await reverseGeocode(lngLat);
+      } catch (err) {
+        console.warn("Reverse geocode failed, falling back to raw coordinates.", err);
+        address = `Lat ${lngLat.lat.toFixed(5)}, Lng ${lngLat.lng.toFixed(5)}`;
+      }
+      const payload = {
+        address,
+        dxf_url: design.dxf_url,
+        config: {
+          target_lat: lngLat.lat,
+          target_lon: lngLat.lng
+        }
+      };
+      if (Array.isArray(design.footprint_points)) {
+        payload.footprint_points = design.footprint_points;
+      }
+      if (Array.isArray(design.front_direction)) {
+        payload.front_direction = design.front_direction;
+      }
+      try {
+        const data = await fetchJSON("/jobs", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        appState.job = {
+          id: data?.id,
+          status: data?.status || "submitted",
+          startedAt: Date.now(),
+          lngLat,
+          designName: design.name || design.slug || "Design"
+        };
+        placeJobMarker(lngLat);
+        updateJobStatus(`Job ${appState.job.id || ""} queued...`);
+        updateJobMeta("Waiting for first parcels...");
+        scheduleJobPolling();
+      } catch (err) {
+        console.error(err);
+        updateJobStatus(`Failed to start job: ${err.message}`, "error");
+        setControlsDisabled(false);
+      }
+    }
+
+    function placeJobMarker(lngLat) {
+      if (appState.jobMarker) {
+        appState.jobMarker.remove();
+        appState.jobMarker = null;
+      }
+      if (!map) return;
+      appState.jobMarker = new maplibregl.Marker({ color: "#be185d" })
+        .setLngLat(lngLat)
+        .setPopup(new maplibregl.Popup().setHTML("<strong>Job origin</strong>"))
+        .addTo(map);
+    }
+
+    function clearJobMarker() {
+      if (appState.jobMarker) {
+        appState.jobMarker.remove();
+        appState.jobMarker = null;
+      }
+    }
+
+    function scheduleJobPolling() {
+      clearJobPolling();
+      fetchJobStatus();
+      fetchJobGeo();
+      appState.pollTimers.status = setInterval(fetchJobStatus, JOB_STATUS_POLL_MS);
+      appState.pollTimers.geo = setInterval(fetchJobGeo, JOB_GEO_POLL_MS);
+    }
+
+    function clearJobPolling() {
+      if (appState.pollTimers.status) {
+        clearInterval(appState.pollTimers.status);
+        appState.pollTimers.status = null;
+      }
+      if (appState.pollTimers.geo) {
+        clearInterval(appState.pollTimers.geo);
+        appState.pollTimers.geo = null;
+      }
+    }
+
+    function isTerminalStatus(status) {
+      if (!status) return false;
+      const normalized = String(status).toLowerCase();
+      return ["done", "complete", "completed", "finished", "failed", "error", "cancelled", "canceled"].includes(normalized);
+    }
+
+    async function fetchJobStatus() {
+      if (!appState.job) return;
+      try {
+        const data = await fetchJSON(`/jobs/${encodeURIComponent(appState.job.id)}`);
+        const status = data?.status || appState.job.status;
+        appState.job.status = status;
+        updateJobStatus(`Job ${status}...`);
+        if (isTerminalStatus(status)) {
+          finalizeJob(`Job ${status}.`);
+        }
+      } catch (err) {
+        console.error(err);
+        updateJobStatus(`Job status error: ${err.message}`, "error");
+      }
+    }
+
+    async function fetchJobGeo() {
+      if (!appState.job) return;
+      try {
+        const data = await fetchJSON(`/jobs/${encodeURIComponent(appState.job.id)}/geo`);
+        if (data?.type === "FeatureCollection") {
+          updateJobSource(data);
+          const featureCount = Array.isArray(data.features) ? data.features.length : 0;
+          const progress =
+            data?.properties?.progress ||
+            data?.metadata?.progress ||
+            data?.progress ||
+            null;
+          if (progress && typeof progress === "object") {
+            updateJobMeta(
+              `Parcels: ${featureCount} · Progress ${progress.completed ?? progress.done ?? "?"}/${
+                progress.total ?? progress.expected ?? "?"
+              }`
+            );
+          } else {
+            updateJobMeta(`Parcels returned: ${featureCount}`);
+          }
+        }
+      } catch (err) {
+        console.warn("Geo polling error", err);
+      }
+    }
+
+    function finalizeJob(message) {
+      clearJobPolling();
+      abortOngoingApiCalls();
+      clearJobMarker();
+      setControlsDisabled(false);
+      ui.cancelJobBtn.disabled = true;
+      updateJobStatus(message || "Job finished.");
+      appState.job = null;
+    }
+
+    function abortOngoingApiCalls() {
+      appState.abortControllers.forEach((controller) => controller.abort());
+      appState.abortControllers.clear();
+    }
+
+    function cancelActiveJob(reason, notify = false) {
+      if (!appState.job) return;
+      const jobId = appState.job.id;
+      updateJobStatus(reason || "Job cancelled.", "error");
+      updateJobMeta("");
+      if (notify && jobId) {
+        sendCancellationSignal(jobId, reason);
+      }
+      clearJobPolling();
+      abortOngoingApiCalls();
+      clearJobMarker();
+      appState.job = null;
+      setControlsDisabled(false);
+      ui.cancelJobBtn.disabled = true;
+      updateJobSource(EMPTY_GEOJSON);
+    }
+
+    function sendCancellationSignal(jobId, reason) {
+      if (!jobId) return;
+      const url = `${API_BASE}/jobs/${encodeURIComponent(jobId)}/cancel`;
+      const payload = JSON.stringify({ reason: reason || "client_left" });
+      if (navigator.sendBeacon) {
+        const blob = new Blob([payload], { type: "application/json" });
+        navigator.sendBeacon(url, blob);
+      } else {
+        fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          keepalive: true
+        }).catch(() => {});
+      }
+    }
 
     function formatAddress(feature) {
       const p = feature?.properties || {};
@@ -226,8 +721,6 @@
         p.postcode || null,
         p.country || null
       ].filter(Boolean);
-
-      // Fallbacks if structured fields are missing
       if (parts.length) return parts.join(", ");
       return feature?.place_name || "Address not found";
     }
@@ -261,8 +754,10 @@
             setStatus(`Reverse geocode failed: ${err.message}`, "error");
             showPopup(longPressCoords, "Unable to retrieve address");
             console.error(err);
+          } finally {
+            suppressNextClick = true;
           }
-        }, 600); // long press threshold (ms)
+        }, 600);
       });
 
       map.on("mouseup", () => {
@@ -273,6 +768,24 @@
         clearTimeout(longPressTimer);
       });
     }
+
+    ui.refreshDesignsBtn.addEventListener("click", loadDesigns);
+    ui.designSelect.addEventListener("change", handleDesignChange);
+    ui.cancelJobBtn.addEventListener("click", () => cancelActiveJob("Job cancelled by user.", true));
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        cancelActiveJob("Page hidden. Stopping crawl.", true);
+      }
+    });
+
+    window.addEventListener("beforeunload", () => {
+      cancelActiveJob("Page closing. Cancelling crawl.", true);
+    });
+
+    initMap();
+    loadDesigns();
+    updateJobStatus("Select a design, then click the map.");
   </script>
 </body>
 </html>

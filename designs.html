@@ -196,6 +196,22 @@
       <p>Upload DXF design files, review shrink-wrap/frontage data, and save ready-to-run designs.</p>
     </header>
 
+    <section id="settingsSection">
+      <h2>API target</h2>
+      <p>Point this dashboard at the Parcel Crawl service (default: current origin). Override the base URL if the API lives elsewhere.</p>
+      <form id="apiForm" class="form-grid">
+        <label style="grid-column: 1 / -1">
+          Base URL
+          <input type="text" id="apiBaseInput" placeholder="https://landlens.up.railway.app">
+        </label>
+        <div class="actions" style="margin-top:8px">
+          <button type="submit">Apply</button>
+          <button type="button" class="btn-secondary" id="resetApiBtn">Use current origin</button>
+        </div>
+        <div id="apiStatus" class="status" style="grid-column: 1 / -1"></div>
+      </form>
+    </section>
+
     <section id="uploadSection">
       <h2>Upload design files</h2>
       <form id="uploadForm">
@@ -274,7 +290,8 @@
   </div>
 
   <script>
-    const API_BASE = "";
+    const API_STORAGE_KEY = "designs-api-base";
+    let apiBase = "";
 
     const state = {
       files: [],
@@ -284,6 +301,8 @@
     };
 
     const elements = {
+      apiStatus: document.getElementById("apiStatus"),
+      apiBaseInput: document.getElementById("apiBaseInput"),
       filesList: document.getElementById("filesList"),
       filesStatus: document.getElementById("filesStatus"),
       uploadStatus: document.getElementById("uploadStatus"),
@@ -297,8 +316,16 @@
       designsList: document.getElementById("designsList")
     };
 
+    function buildUrl(path) {
+      const trimmedBase = apiBase?.trim();
+      if (!trimmedBase) return path;
+      const cleanBase = trimmedBase.endsWith("/") ? trimmedBase.slice(0, -1) : trimmedBase;
+      const cleanPath = path.startsWith("/") ? path : `/${path}`;
+      return `${cleanBase}${cleanPath}`;
+    }
+
     async function fetchJSON(path, options = {}) {
-      const response = await fetch(`${API_BASE}${path}`, options);
+      const response = await fetch(buildUrl(path), options);
       if (!response.ok) {
         const body = await response.text();
         throw new Error(`Request failed (${response.status}): ${body || response.statusText}`);
@@ -606,11 +633,48 @@
       });
     }
 
+    function initApiBase() {
+      const params = new URLSearchParams(window.location.search);
+      const queryBase = params.get("api");
+      const storedBase = localStorage.getItem(API_STORAGE_KEY);
+      const initial = queryBase ?? storedBase ?? "";
+      applyApiBase(initial, false);
+    }
+
+    function applyApiBase(value, persist = true) {
+      apiBase = (value || "").trim();
+      elements.apiBaseInput.value = apiBase;
+      if (persist) {
+        if (apiBase) {
+          localStorage.setItem(API_STORAGE_KEY, apiBase);
+        } else {
+          localStorage.removeItem(API_STORAGE_KEY);
+        }
+      }
+      setStatus(elements.apiStatus, apiBase ? `Using API base ${apiBase}` : "Using current origin");
+    }
+
+    function handleApiForm(event) {
+      event.preventDefault();
+      applyApiBase(elements.apiBaseInput.value, true);
+      loadFiles();
+      loadDesigns();
+    }
+
+    function resetApiBase() {
+      applyApiBase("", true);
+      loadFiles();
+      loadDesigns();
+    }
+
+    document.getElementById("apiForm").addEventListener("submit", handleApiForm);
+    document.getElementById("resetApiBtn").addEventListener("click", resetApiBase);
     document.getElementById("uploadForm").addEventListener("submit", handleUpload);
     document.getElementById("refreshFilesBtn").addEventListener("click", loadFiles);
     document.getElementById("shrinkwrapForm").addEventListener("submit", handleShrinkwrap);
     document.getElementById("saveDesignBtn").addEventListener("click", handleSaveDesign);
 
+    initApiBase();
     loadFiles();
     loadDesigns();
   </script>

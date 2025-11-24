@@ -23,21 +23,43 @@
       left: 0;
     }
 
-    .map-title {
+    .map-title,
+    .status-banner {
       position: absolute;
-      top: 12px;
-      left: 12px;
-      background: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.94);
       padding: 8px 12px;
       border-radius: 6px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       font-weight: 600;
       z-index: 1;
     }
+
+    .map-title {
+      top: 12px;
+      left: 12px;
+    }
+
+    .status-banner {
+      top: 12px;
+      right: 12px;
+      max-width: 280px;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    .status-banner.error {
+      border: 1px solid #d93025;
+      color: #d93025;
+    }
+
+    .status-banner.hidden {
+      display: none;
+    }
   </style>
 </head>
 <body>
   <div class="map-title">MapTiler demo</div>
+  <div id="status" class="status-banner hidden"></div>
   <div id="map"></div>
 
   <script>
@@ -53,6 +75,33 @@
     });
 
     map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+    const statusEl = document.getElementById("status");
+
+    function setStatus(message, type = "info") {
+      if (!message) {
+        statusEl.textContent = "";
+        statusEl.classList.add("hidden");
+        return;
+      }
+      statusEl.textContent = message;
+      statusEl.classList.remove("hidden");
+      statusEl.classList.toggle("error", type === "error");
+      console[type === "error" ? "error" : "log"]("[Map status]", message);
+    }
+
+    setStatus("Loading map...");
+
+    map.on("load", () => {
+      setStatus("");
+    });
+
+    map.on("error", (event) => {
+      if (!event?.error) return;
+      const msg = event.error.message || "Unknown map error";
+      // Shorten MapTiler token errors for clarity
+      setStatus(`Map error: ${msg}`, "error");
+    });
 
     function formatAddress(feature) {
       const p = feature?.properties || {};
@@ -93,6 +142,7 @@
           const address = await reverseGeocode(longPressCoords);
           showPopup(longPressCoords, address);
         } catch (err) {
+          setStatus(`Reverse geocode failed: ${err.message}`, "error");
           showPopup(longPressCoords, "Unable to retrieve address");
           console.error(err);
         }

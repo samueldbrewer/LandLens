@@ -763,6 +763,86 @@
       addLogEntry("GET /jobs/{id}/geo", { id: appState.job.id });
       try {
         const data = await fetchJSON(`/jobs/${encodeURIComponent(appState.job.id)}/geo`);
+        const collection = normalizeGeoResponse(data);
+        updateJobSource(collection);
+        const featureCount = Array.isArray(collection.features) ? collection.features.length : 0;
+        const progress = extractProgress(data);
+        if (progress) {
+          updateJobMeta(
+            `Parcels: ${featureCount} · Progress ${progress.completed ?? "?"}/${progress.total ?? "?"} (${hintsFromProgress(
+              progress
+            )})`
+          );
+        } else {
+          updateJobMeta(`Parcels returned: ${featureCount}`);
+        }
+        addLogEntry("Geo update", { featureCount, progress });
+      } catch (err) {
+        console.warn("Geo polling error", err);
+        addLogEntry("Geo polling error", { error: err.message }, "error");
+      }
+    }
+
+    function normalizeGeoResponse(payload) {
+      if (!payload) return EMPTY_GEOJSON;
+      if (payload.type === "FeatureCollection" && Array.isArray(payload.features)) {
+        return payload;
+      }
+      const features = [];
+      const segments =
+        payload?.features ||
+        payload?.items ||
+        payload?.geojson ||
+        payload?.data ||
+        payload?.collection ||
+        payload?.parcels ||
+        payload?.queue ||
+        [];
+      if (Array.isArray(segments)) {
+        segments.forEach((item) => {
+          if (item?.type === "Feature") {
+            features.push(item);
+          } else if (item?.geometry) {
+            features.push({
+              type: "Feature",
+              geometry: item.geometry,
+              properties: item.properties || {}
+            });
+          }
+        });
+      }
+      return { type: "FeatureCollection", features };
+    }
+
+    function extractProgress(payload) {
+      if (!payload) return null;
+      const sources = [
+        payload.progress,
+        payload.properties?.progress,
+        payload.metadata?.progress,
+        payload.status,
+        payload
+      ];
+      const found = sources.find((source) => source && (source.completed !== undefined || source.total !== undefined));
+      if (!found) return null;
+      return {
+        completed: found.completed ?? found.done ?? found.current ?? null,
+        total: found.total ?? found.expected ?? found.limit ?? null,
+        extra: {
+          queued: found.queued ?? null,
+          remaining: found.remaining ?? null,
+          running: found.running ?? null
+        }
+      };
+    }
+
+    function hintsFromProgress(progress) {
+      const hints = [];
+      if (progress.extra?.queued) hints.push(`${progress.extra.queued} queued`);
+      if (progress.extra?.running) hints.push(`${progress.extra.running} running`);
+      if (progress.extra?.remaining) hints.push(`${progress.extra.remaining} remaining`);
+      return hints.length ? hints.join(", ") : "no queue";
+    }
         if (data?.type === "FeatureCollection") {
           updateJobSource(data);
           const featureCount = Array.isArray(data.features) ? data.features.length : 0;

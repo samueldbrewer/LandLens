@@ -93,6 +93,41 @@
       setStatus(`Promise rejection: ${reason}`, "error");
     });
 
+    function sampleTileUrl(styleJSON) {
+      const sources = styleJSON?.sources || {};
+      for (const [, source] of Object.entries(sources)) {
+        if (Array.isArray(source.tiles) && source.tiles.length > 0) {
+          const template = source.tiles[0];
+          if (typeof template !== "string") continue;
+          return template
+            .replace("{z}", "0")
+            .replace("{x}", "0")
+            .replace("{y}", "0");
+        }
+      }
+      return null;
+    }
+
+    async function verifyTileAccess(styleJSON) {
+      const tileUrl = sampleTileUrl(styleJSON);
+      if (!tileUrl) {
+        setStatus("No tile URL found in style.", "error");
+        return false;
+      }
+
+      setStatus("Testing tile access...");
+      try {
+        const response = await fetch(tileUrl, { method: "HEAD" });
+        if (!response.ok) {
+          throw new Error(`Tile fetch failed (${response.status})`);
+        }
+        return true;
+      } catch (err) {
+        setStatus(`Tile test failed: ${err.message}`, "error");
+        return false;
+      }
+    }
+
     async function initMap() {
       setStatus("Checking MapTiler style...");
       let styleJSON;
@@ -107,6 +142,12 @@
         return;
       }
 
+      const tileAccessOk = await verifyTileAccess(styleJSON);
+      if (!tileAccessOk) {
+        // Still init map so interactions can continue for debugging
+        console.warn("Continuing without tile access.");
+      }
+
       setStatus("Initializing map...");
       map = new maplibregl.Map({
         container: "map",
@@ -117,7 +158,16 @@
 
       map.addControl(new maplibregl.NavigationControl(), "top-right");
 
+      let loadTimeout = setTimeout(() => {
+        setStatus("Map still loading... check network/API key restrictions.", "error");
+      }, 7000);
+
       map.on("load", () => {
+        clearTimeout(loadTimeout);
+        setStatus("Map style loaded, waiting for tiles...");
+      });
+
+      map.on("idle", () => {
         setStatus("");
       });
 

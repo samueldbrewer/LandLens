@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Land Lens Designs</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f7;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #f7fafc, #edf2f7);
+      color: #1a202c;
+    }
+
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 20px 80px;
+    }
+
+    header {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 2rem;
+    }
+
+    p {
+      margin: 0;
+      color: #4a5568;
+    }
+
+    section {
+      background: #fff;
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+    }
+
+    section h2 {
+      margin-top: 0;
+      font-size: 1.25rem;
+      color: #1a202c;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      font-weight: 600;
+      color: #2d3748;
+      font-size: 0.95rem;
+    }
+
+    input[type="text"],
+    input[type="file"],
+    textarea,
+    select {
+      margin-top: 6px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #cbd5f5;
+      font-size: 0.95rem;
+      font-family: inherit;
+      background: #fdfefe;
+    }
+
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      background: #2563eb;
+      color: #fff;
+      padding: 10px 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease;
+      font-size: 0.95rem;
+    }
+
+    button:hover {
+      background: #1d4ed8;
+    }
+
+    .btn-secondary {
+      background: #e2e8f0;
+      color: #1a202c;
+    }
+
+    .btn-secondary:hover {
+      background: #cbd5e0;
+    }
+
+    .status {
+      margin-top: 12px;
+      font-size: 0.9rem;
+      color: #4a5568;
+    }
+
+    .status.error {
+      color: #d93025;
+    }
+
+    .list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card {
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px;
+      background: #fff;
+    }
+
+    .card header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 8px;
+    }
+
+    .card header h3 {
+      margin: 0;
+      font-size: 1rem;
+      color: #1a202c;
+    }
+
+    .chip {
+      background: #ebf4ff;
+      color: #1e429f;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    pre {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      overflow-x: auto;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    @media (max-width: 600px) {
+      button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>Design Library</h1>
+      <p>Upload DXF design files, review shrink-wrap/frontage data, and save ready-to-run designs.</p>
+    </header>
+
+    <section id="uploadSection">
+      <h2>Upload design files</h2>
+      <form id="uploadForm">
+        <div class="form-grid">
+          <label>
+            File (DXF or ZIP)
+            <input type="file" id="designFile" accept=".dxf,.zip" required>
+          </label>
+          <label>
+            Optional filename override
+            <input type="text" id="filenameOverride" placeholder="my_design.dxf">
+          </label>
+        </div>
+        <div class="actions" style="margin-top:16px">
+          <button type="submit">Upload</button>
+          <button type="button" class="btn-secondary" id="refreshFilesBtn">Refresh file list</button>
+        </div>
+        <div id="uploadStatus" class="status"></div>
+      </form>
+    </section>
+
+    <section id="filesSection">
+      <h2>Uploaded files</h2>
+      <ul id="filesList" class="list"></ul>
+      <div id="filesStatus" class="status"></div>
+    </section>
+
+    <section id="shrinkwrapSection">
+      <h2>Shrink-wrap & frontage</h2>
+      <p>Select an uploaded file and provide rectangle/front points to generate shrink-wrap data. Paste JSON arrays or enter comma-separated coordinates per line.</p>
+      <form id="shrinkwrapForm">
+        <div class="form-grid">
+          <label>
+            Select file
+            <select id="shrinkwrapFileSelect" required>
+              <option value="">-- Choose a file --</option>
+            </select>
+          </label>
+          <label>
+            Rectangle points (3)
+            <textarea id="rectanglePointsInput" placeholder='[[x1,y1],[x2,y2],[x3,y3]]'></textarea>
+          </label>
+          <label>
+            Frontage points (2)
+            <textarea id="frontPointsInput" placeholder='[[x1,y1],[x2,y2]]'></textarea>
+          </label>
+        </div>
+        <div class="actions" style="margin-top:16px">
+          <button type="submit">Generate shrink-wrap</button>
+        </div>
+        <div id="shrinkwrapStatus" class="status"></div>
+      </form>
+
+      <div id="shrinkwrapResult" class="card hidden" style="margin-top:18px;">
+        <header>
+          <h3>Latest shrink-wrap result</h3>
+          <span class="chip" id="shrinkwrapResultFile"></span>
+        </header>
+        <pre id="shrinkwrapResultData"></pre>
+        <div class="actions">
+          <label style="flex:1;">
+            Design name
+            <input type="text" id="designNameInput" placeholder="Modern Ranch A">
+          </label>
+          <button id="saveDesignBtn" type="button">Save design</button>
+        </div>
+        <div id="saveDesignStatus" class="status"></div>
+      </div>
+    </section>
+
+    <section id="designsSection">
+      <h2>Saved designs & shrink-wraps</h2>
+      <ul id="designsList" class="list"></ul>
+      <div id="designsStatus" class="status"></div>
+    </section>
+  </div>
+
+  <script>
+    const API_BASE = "";
+
+    const state = {
+      files: [],
+      designs: [],
+      previews: {},
+      lastShrinkwrap: null
+    };
+
+    const elements = {
+      filesList: document.getElementById("filesList"),
+      filesStatus: document.getElementById("filesStatus"),
+      uploadStatus: document.getElementById("uploadStatus"),
+      shrinkwrapStatus: document.getElementById("shrinkwrapStatus"),
+      designsStatus: document.getElementById("designsStatus"),
+      shrinkwrapResult: document.getElementById("shrinkwrapResult"),
+      shrinkwrapResultData: document.getElementById("shrinkwrapResultData"),
+      shrinkwrapResultFile: document.getElementById("shrinkwrapResultFile"),
+      saveDesignStatus: document.getElementById("saveDesignStatus"),
+      shrinkwrapFileSelect: document.getElementById("shrinkwrapFileSelect"),
+      designsList: document.getElementById("designsList")
+    };
+
+    async function fetchJSON(path, options = {}) {
+      const response = await fetch(`${API_BASE}${path}`, options);
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Request failed (${response.status}): ${body || response.statusText}`);
+      }
+      return response.json();
+    }
+
+    function normalizeFiles(payload) {
+      if (Array.isArray(payload)) return payload;
+      if (payload && Array.isArray(payload.files)) return payload.files;
+      return [];
+    }
+
+    function normalizeDesigns(payload) {
+      if (Array.isArray(payload)) return payload;
+      if (payload && Array.isArray(payload.designs)) return payload.designs;
+      return [];
+    }
+
+    function getFileName(file) {
+      return file?.name || file?.filename || file?.key || file?.path || "unknown";
+    }
+
+    function getFileUrl(file) {
+      return file?.file_url || file?.download_url || file?.url || "";
+    }
+
+    function setStatus(el, message, type = "info") {
+      if (!el) return;
+      if (!message) {
+        el.textContent = "";
+        el.classList.remove("error");
+        return;
+      }
+      el.textContent = message;
+      el.classList.toggle("error", type === "error");
+    }
+
+    async function loadFiles() {
+      setStatus(elements.filesStatus, "Loading files...");
+      try {
+        const payload = await fetchJSON("/files");
+        state.files = normalizeFiles(payload);
+        renderFiles();
+        populateFileSelect();
+        setStatus(elements.filesStatus, `Loaded ${state.files.length} file(s).`);
+      } catch (err) {
+        console.error(err);
+        setStatus(elements.filesStatus, err.message, "error");
+      }
+    }
+
+    async function loadDesigns() {
+      setStatus(elements.designsStatus, "Loading designs...");
+      try {
+        const payload = await fetchJSON("/designs");
+        state.designs = normalizeDesigns(payload);
+        renderDesigns();
+        setStatus(elements.designsStatus, `Loaded ${state.designs.length} design(s).`);
+      } catch (err) {
+        console.error(err);
+        setStatus(elements.designsStatus, err.message, "error");
+      }
+    }
+
+    function renderFiles() {
+      elements.filesList.innerHTML = "";
+      if (!state.files.length) {
+        elements.filesList.innerHTML = "<li>No files uploaded yet.</li>";
+        return;
+      }
+      state.files.forEach((file) => {
+        const li = document.createElement("li");
+        li.className = "card";
+        const name = getFileName(file);
+        const uploaded = file?.uploaded_at ? new Date(file.uploaded_at).toLocaleString() : "unknown";
+        const info = document.createElement("div");
+        info.innerHTML = `
+          <header>
+            <h3>${name}</h3>
+            <span class="chip">${uploaded}</span>
+          </header>
+          <div>Size: ${file?.size ? `${(file.size / 1024).toFixed(1)} KB` : "N/A"}</div>
+          <div>Source: ${getFileUrl(file) || "N/A"}</div>
+        `;
+        li.appendChild(info);
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+        if (getFileUrl(file)) {
+          const link = document.createElement("a");
+          link.href = getFileUrl(file);
+          link.target = "_blank";
+          link.rel = "noopener";
+          link.className = "btn-secondary";
+          link.textContent = "Download";
+          actions.appendChild(link);
+        }
+
+        const previewBtn = document.createElement("button");
+        previewBtn.type = "button";
+        previewBtn.className = "btn-secondary";
+        previewBtn.textContent = "Auto preview shrink-wrap";
+        previewBtn.addEventListener("click", () => previewShrinkwrap(name));
+        actions.appendChild(previewBtn);
+        li.appendChild(actions);
+
+        const previewOutput = document.createElement("pre");
+        previewOutput.className = "hidden";
+        previewOutput.id = `preview-${CSS.escape(name)}`;
+        li.appendChild(previewOutput);
+
+        elements.filesList.appendChild(li);
+      });
+    }
+
+    function populateFileSelect() {
+      const select = elements.shrinkwrapFileSelect;
+      const current = select.value;
+      select.innerHTML = '<option value="">-- Choose a file --</option>';
+      state.files.forEach((file) => {
+        const name = getFileName(file);
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        select.appendChild(option);
+      });
+      if (current) {
+        select.value = current;
+      }
+    }
+
+    async function previewShrinkwrap(filename) {
+      if (!filename) return;
+      setStatus(elements.filesStatus, `Previewing shrink-wrap for ${filename}...`);
+      try {
+        const data = await fetchJSON(`/files/${encodeURIComponent(filename)}/preview`);
+        state.previews[filename] = data;
+        showPreview(filename, data);
+        setStatus(elements.filesStatus, `Preview ready for ${filename}.`);
+      } catch (err) {
+        console.error(err);
+        setStatus(elements.filesStatus, err.message, "error");
+      }
+    }
+
+    function showPreview(filename, data) {
+      const pre = document.getElementById(`preview-${CSS.escape(filename)}`);
+      if (!pre) return;
+      pre.textContent = JSON.stringify(data, null, 2);
+      pre.classList.remove("hidden");
+    }
+
+    function parsePointsInput(value, expected) {
+      if (!value) return [];
+      const trimmed = value.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (err) {
+        const parts = trimmed.split(/\n|;/).map((row) => row.trim()).filter(Boolean);
+        const coords = parts.map((row) => row.split(/[, ]+/).map((n) => Number(n.trim())).slice(0, 2));
+        if (coords.length) return coords;
+      }
+      throw new Error(`Could not parse points input. Expected ${expected} coordinate pairs.`);
+    }
+
+    async function handleUpload(event) {
+      event.preventDefault();
+      const fileInput = document.getElementById("designFile");
+      const overrideInput = document.getElementById("filenameOverride");
+      if (!fileInput.files.length) {
+        setStatus(elements.uploadStatus, "Pick a file first.", "error");
+        return;
+      }
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+      const override = overrideInput.value.trim();
+      setStatus(elements.uploadStatus, "Uploading...");
+      try {
+        const query = override ? `?filename=${encodeURIComponent(override)}` : "";
+        const payload = await fetchJSON(`/files${query}`, { method: "POST", body: formData });
+        setStatus(elements.uploadStatus, `Upload complete: ${payload?.name || payload?.filename || "success"}`);
+        fileInput.value = "";
+        overrideInput.value = "";
+        await loadFiles();
+      } catch (err) {
+        console.error(err);
+        setStatus(elements.uploadStatus, err.message, "error");
+      }
+    }
+
+    async function handleShrinkwrap(event) {
+      event.preventDefault();
+      const filename = elements.shrinkwrapFileSelect.value;
+      if (!filename) {
+        setStatus(elements.shrinkwrapStatus, "Select a file first.", "error");
+        return;
+      }
+      try {
+        const rectangle = parsePointsInput(document.getElementById("rectanglePointsInput").value, 3);
+        const frontPoints = parsePointsInput(document.getElementById("frontPointsInput").value, 2);
+        if (rectangle.length !== 3) throw new Error("Rectangle points must contain exactly 3 vertices.");
+        if (frontPoints.length !== 2) throw new Error("Frontage points must contain exactly 2 vertices.");
+        setStatus(elements.shrinkwrapStatus, "Submitting shrink-wrap request...");
+        const payload = await fetchJSON(`/files/${encodeURIComponent(filename)}/shrinkwrap`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rectangle_points: rectangle, front_points: frontPoints })
+        });
+        state.lastShrinkwrap = { filename, data: payload };
+        renderShrinkwrapResult();
+        setStatus(elements.shrinkwrapStatus, "Shrink-wrap ready. Review below.");
+      } catch (err) {
+        console.error(err);
+        setStatus(elements.shrinkwrapStatus, err.message, "error");
+      }
+    }
+
+    function renderShrinkwrapResult() {
+      if (!state.lastShrinkwrap) {
+        elements.shrinkwrapResult.classList.add("hidden");
+        return;
+      }
+      elements.shrinkwrapResult.classList.remove("hidden");
+      elements.shrinkwrapResultFile.textContent = state.lastShrinkwrap.filename;
+      elements.shrinkwrapResultData.textContent = JSON.stringify(state.lastShrinkwrap.data, null, 2);
+      setStatus(elements.saveDesignStatus, "");
+    }
+
+    async function handleSaveDesign() {
+      if (!state.lastShrinkwrap) {
+        setStatus(elements.saveDesignStatus, "Run shrink-wrap first.", "error");
+        return;
+      }
+      const nameInput = document.getElementById("designNameInput");
+      const designName = nameInput.value.trim();
+      if (!designName) {
+        setStatus(elements.saveDesignStatus, "Provide a design name.", "error");
+        return;
+      }
+      const fileMeta = state.files.find((f) => getFileName(f) === state.lastShrinkwrap.filename);
+      if (!fileMeta) {
+        setStatus(elements.saveDesignStatus, "Unable to locate file metadata for selected shrink-wrap.", "error");
+        return;
+      }
+      const payload = {
+        name: designName,
+        dxf_url: getFileUrl(fileMeta),
+        footprint_points: state.lastShrinkwrap.data?.footprint_points,
+        front_direction: state.lastShrinkwrap.data?.front_direction
+      };
+      if (!payload.dxf_url) {
+        setStatus(elements.saveDesignStatus, "File URL missing; cannot save design.", "error");
+        return;
+      }
+      setStatus(elements.saveDesignStatus, "Saving design...");
+      try {
+        await fetchJSON("/designs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        setStatus(elements.saveDesignStatus, "Design saved.");
+        nameInput.value = "";
+        await loadDesigns();
+      } catch (err) {
+        console.error(err);
+        setStatus(elements.saveDesignStatus, err.message, "error");
+      }
+    }
+
+    function renderDesigns() {
+      elements.designsList.innerHTML = "";
+      if (!state.designs.length) {
+        elements.designsList.innerHTML = "<li>No saved designs yet.</li>";
+        return;
+      }
+      state.designs.forEach((design) => {
+        const li = document.createElement("li");
+        li.className = "card";
+        const header = document.createElement("header");
+        const title = document.createElement("h3");
+        title.textContent = design?.name || design?.slug || "untitled";
+        header.appendChild(title);
+        if (design?.updated_at) {
+          const chip = document.createElement("span");
+          chip.className = "chip";
+          chip.textContent = new Date(design.updated_at).toLocaleString();
+          header.appendChild(chip);
+        }
+        li.appendChild(header);
+        const body = document.createElement("div");
+        body.innerHTML = `
+          <div><strong>DXF:</strong> ${design?.dxf_url || "N/A"}</div>
+          <div><strong>Front direction:</strong> ${JSON.stringify(design?.front_direction || [])}</div>
+          <div><strong>Footprint points:</strong></div>
+        `;
+        li.appendChild(body);
+        const pre = document.createElement("pre");
+        pre.textContent = JSON.stringify(design?.footprint_points || [], null, 2);
+        li.appendChild(pre);
+        elements.designsList.appendChild(li);
+      });
+    }
+
+    document.getElementById("uploadForm").addEventListener("submit", handleUpload);
+    document.getElementById("refreshFilesBtn").addEventListener("click", loadFiles);
+    document.getElementById("shrinkwrapForm").addEventListener("submit", handleShrinkwrap);
+    document.getElementById("saveDesignBtn").addEventListener("click", handleSaveDesign);
+
+    loadFiles();
+    loadDesigns();
+  </script>
+</body>
+</html>

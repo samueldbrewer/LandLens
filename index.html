@@ -333,9 +333,16 @@
       ui.cancelJobBtn.disabled = !disabled;
     }
 
+    function generateLogId() {
+      if (typeof window !== "undefined" && window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+      }
+      return `log-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
     function addLogEntry(message, payload, level = "info") {
       const entry = {
-        id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+        id: generateLogId(),
         timestamp: new Date(),
         message,
         payload,

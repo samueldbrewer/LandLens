@@ -141,6 +141,55 @@
       color: #d93025;
     }
 
+    .log-section {
+      border-top: 1px solid rgba(148, 163, 184, 0.35);
+      padding-top: 12px;
+    }
+
+    .log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .log-feed {
+      margin-top: 10px;
+      max-height: 220px;
+      overflow-y: auto;
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 10px;
+      color: #e2e8f0;
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+
+    .log-entry {
+      border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+      padding: 6px 0;
+    }
+
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+
+    .log-entry strong {
+      color: #f8fafc;
+      display: block;
+    }
+
+    .log-entry pre {
+      margin: 4px 0 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      background: rgba(15, 23, 42, 0.7);
+      padding: 6px;
+      border-radius: 4px;
+      color: #cbd5f5;
+    }
+
     .job-status {
       font-weight: 600;
       color: #0f172a;
@@ -192,6 +241,18 @@
         <button id="cancelJobBtn" class="btn-secondary" type="button" disabled>Cancel active job</button>
       </div>
     </div>
+    <div class="panel-section log-section">
+      <div class="log-header">
+        <div>
+          <strong style="color:#0f172a;">Run log</strong>
+          <div class="panel-status" style="margin-top:2px;">Latest API payloads & status</div>
+        </div>
+        <button id="clearLogBtn" class="btn-secondary" type="button" style="padding:6px 10px;font-size:0.8rem;">Clear</button>
+      </div>
+      <div id="logFeed" class="log-feed">
+        <div class="log-entry"><strong>Waiting for activity…</strong></div>
+      </div>
+    </div>
   </div>
   <div id="status" class="status-banner hidden"></div>
   <div id="map"></div>
@@ -221,7 +282,9 @@
       refreshDesignsBtn: document.getElementById("refreshDesignsBtn"),
       jobStatusText: document.getElementById("jobStatusText"),
       jobMetaText: document.getElementById("jobMetaText"),
-      cancelJobBtn: document.getElementById("cancelJobBtn")
+      cancelJobBtn: document.getElementById("cancelJobBtn"),
+      clearLogBtn: document.getElementById("clearLogBtn"),
+      logFeed: document.getElementById("logFeed")
     };
 
     const appState = {
@@ -230,8 +293,10 @@
       job: null,
       pollTimers: { status: null, geo: null },
       abortControllers: new Set(),
-      jobMarker: null
+      jobMarker: null,
+      logs: []
     };
+    const LOG_LIMIT = 200;
 
     function setStatus(message, type = "info") {
       if (!message) {
@@ -266,6 +331,55 @@
       ui.designSelect.disabled = disabled;
       ui.refreshDesignsBtn.disabled = disabled;
       ui.cancelJobBtn.disabled = !disabled;
+    }
+
+    function addLogEntry(message, payload, level = "info") {
+      const entry = {
+        id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+        timestamp: new Date(),
+        message,
+        payload,
+        level
+      };
+      appState.logs.unshift(entry);
+      if (appState.logs.length > LOG_LIMIT) {
+        appState.logs.pop();
+      }
+      renderLog();
+    }
+
+    function formatPayload(payload) {
+      if (payload === undefined) return "";
+      try {
+        return JSON.stringify(payload, null, 2);
+      } catch (err) {
+        return String(payload);
+      }
+    }
+
+    function renderLog() {
+      if (!ui.logFeed) return;
+      if (!appState.logs.length) {
+        ui.logFeed.innerHTML = '<div class="log-entry"><strong>No entries yet.</strong></div>';
+        return;
+      }
+      ui.logFeed.innerHTML = appState.logs
+        .map((entry) => {
+          const time = entry.timestamp.toLocaleTimeString();
+          const payloadText = formatPayload(entry.payload);
+          return `
+            <div class="log-entry">
+              <strong>[${time}] ${entry.message}</strong>
+              ${payloadText ? `<pre>${payloadText}</pre>` : ""}
+            </div>
+          `;
+        })
+        .join("");
+    }
+
+    function clearLog() {
+      appState.logs = [];
+      renderLog();
     }
 
     window.addEventListener("error", (event) => {
@@ -459,15 +573,18 @@
 
     async function loadDesigns() {
       setDesignStatus("Loading designs...");
+      addLogEntry("GET /designs", null);
       try {
         const payload = await fetchJSON("/designs");
         const designs = Array.isArray(payload) ? payload : payload?.designs || [];
         appState.designs = designs;
         populateDesignSelect();
         setDesignStatus(`Loaded ${designs.length} design${designs.length === 1 ? "" : "s"}.`);
+        addLogEntry("Designs loaded", designs);
       } catch (err) {
         console.error(err);
         setDesignStatus(`Failed to load designs: ${err.message}`, "error");
+        addLogEntry("Design load failed", { error: err.message }, "error");
       }
     }
 
@@ -552,6 +669,7 @@
       if (Array.isArray(design.front_direction)) {
         payload.front_direction = design.front_direction;
       }
+      addLogEntry("POST /jobs payload", payload);
       try {
         const data = await fetchJSON("/jobs", {
           method: "POST",
@@ -564,6 +682,7 @@
           lngLat,
           designName: design.name || design.slug || "Design"
         };
+        addLogEntry("Job submitted", data);
         placeJobMarker(lngLat);
         updateJobStatus(`Job ${appState.job.id || ""} queued...`);
         updateJobMeta("Waiting for first parcels...");
@@ -571,6 +690,7 @@
       } catch (err) {
         console.error(err);
         updateJobStatus(`Failed to start job: ${err.message}`, "error");
+        addLogEntry("Job start failed", { error: err.message }, "error");
         setControlsDisabled(false);
       }
     }
@@ -621,22 +741,26 @@
 
     async function fetchJobStatus() {
       if (!appState.job) return;
+      addLogEntry("GET /jobs/{id}", { id: appState.job.id });
       try {
         const data = await fetchJSON(`/jobs/${encodeURIComponent(appState.job.id)}`);
         const status = data?.status || appState.job.status;
         appState.job.status = status;
         updateJobStatus(`Job ${status}...`);
+        addLogEntry("Job status response", data);
         if (isTerminalStatus(status)) {
           finalizeJob(`Job ${status}.`);
         }
       } catch (err) {
         console.error(err);
         updateJobStatus(`Job status error: ${err.message}`, "error");
+        addLogEntry("Job status error", { error: err.message }, "error");
       }
     }
 
     async function fetchJobGeo() {
       if (!appState.job) return;
+      addLogEntry("GET /jobs/{id}/geo", { id: appState.job.id });
       try {
         const data = await fetchJSON(`/jobs/${encodeURIComponent(appState.job.id)}/geo`);
         if (data?.type === "FeatureCollection") {
@@ -656,9 +780,11 @@
           } else {
             updateJobMeta(`Parcels returned: ${featureCount}`);
           }
+          addLogEntry("Geo update", { featureCount, progress });
         }
       } catch (err) {
         console.warn("Geo polling error", err);
+        addLogEntry("Geo polling error", { error: err.message }, "error");
       }
     }
 
@@ -669,6 +795,7 @@
       setControlsDisabled(false);
       ui.cancelJobBtn.disabled = true;
       updateJobStatus(message || "Job finished.");
+      addLogEntry("Job finalized", { message });
       appState.job = null;
     }
 
@@ -682,6 +809,7 @@
       const jobId = appState.job.id;
       updateJobStatus(reason || "Job cancelled.", "error");
       updateJobMeta("");
+      addLogEntry("Job cancelled", { reason, notify });
       if (notify && jobId) {
         sendCancellationSignal(jobId, reason);
       }
@@ -698,6 +826,7 @@
       if (!jobId) return;
       const url = `${API_BASE}/jobs/${encodeURIComponent(jobId)}/cancel`;
       const payload = JSON.stringify({ reason: reason || "client_left" });
+      addLogEntry("POST /jobs/{id}/cancel", { jobId, reason });
       if (navigator.sendBeacon) {
         const blob = new Blob([payload], { type: "application/json" });
         navigator.sendBeacon(url, blob);
@@ -772,6 +901,9 @@
     ui.refreshDesignsBtn.addEventListener("click", loadDesigns);
     ui.designSelect.addEventListener("change", handleDesignChange);
     ui.cancelJobBtn.addEventListener("click", () => cancelActiveJob("Job cancelled by user.", true));
+    if (ui.clearLogBtn) {
+      ui.clearLogBtn.addEventListener("click", clearLog);
+    }
 
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
@@ -783,6 +915,7 @@
       cancelActiveJob("Page closing. Cancelling crawl.", true);
     });
 
+    renderLog();
     initMap();
     loadDesigns();
     updateJobStatus("Select a design, then click the map.");

@@ -65,6 +65,8 @@
   <script>
     const key = "CBo7orMIbQ1XA33zeKV8";
     const styleUrl = `https://api.maptiler.com/maps/streets-v2/style.json?key=${key}`;
+    maplibregl.workerUrl = "https://cdn.maptiler.com/maplibre-gl-js/v2.4.0/maplibre-gl-csp-worker.js";
+    maplibregl.workerCount = 2;
     let map;
     let longPressTimer;
     let longPressCoords = null;
@@ -93,23 +95,52 @@
       setStatus(`Promise rejection: ${reason}`, "error");
     });
 
-    function sampleTileUrl(styleJSON) {
+    function formatTileTemplate(template) {
+      return template
+        .replace("{z}", "0")
+        .replace("{x}", "0")
+        .replace("{y}", "0");
+    }
+
+    async function sampleTileUrl(styleJSON) {
       const sources = styleJSON?.sources || {};
-      for (const [, source] of Object.entries(sources)) {
-        if (Array.isArray(source.tiles) && source.tiles.length > 0) {
-          const template = source.tiles[0];
-          if (typeof template !== "string") continue;
-          return template
-            .replace("{z}", "0")
-            .replace("{x}", "0")
-            .replace("{y}", "0");
-        }
+      for (const source of Object.values(sources)) {
+        const tileUrl = await firstTileFromSource(source);
+        if (tileUrl) return tileUrl;
       }
       return null;
     }
 
+    async function firstTileFromSource(source) {
+      if (!source) return null;
+
+      if (Array.isArray(source.tiles) && source.tiles.length > 0) {
+        const template = source.tiles[0];
+        if (typeof template === "string") {
+          return formatTileTemplate(template);
+        }
+      }
+
+      if (source.url) {
+        try {
+          const response = await fetch(source.url);
+          if (!response.ok) {
+            throw new Error(`TileJSON fetch failed (${response.status})`);
+          }
+          const tileJSON = await response.json();
+          if (Array.isArray(tileJSON.tiles) && tileJSON.tiles.length) {
+            return formatTileTemplate(tileJSON.tiles[0]);
+          }
+        } catch (err) {
+          console.error("TileJSON fetch failed", err);
+        }
+      }
+
+      return null;
+    }
+
     async function verifyTileAccess(styleJSON) {
-      const tileUrl = sampleTileUrl(styleJSON);
+      const tileUrl = await sampleTileUrl(styleJSON);
       if (!tileUrl) {
         setStatus("No tile URL found in style.", "error");
         return false;

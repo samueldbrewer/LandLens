@@ -876,20 +876,21 @@
       addLogEntry("GET /jobs/{id}/geo", { id: appState.job.id });
       try {
         const data = await fetchJSON(`/jobs/${encodeURIComponent(appState.job.id)}/geo`);
-        const collection = normalizeGeoResponse(data);
+        const normalized = normalizeGeoResponse(data);
+        const collection = convertFeatureCollectionToLngLat(normalized);
         updateJobSource(collection);
         const featureCount = Array.isArray(collection.features) ? collection.features.length : 0;
         const progress = extractProgress(data);
         if (progress) {
           updateJobMeta(
-              `Parcels: ${featureCount} · Progress ${progress.completed ?? "?"}/${progress.total ?? "?"} (${hintsFromProgress(
-                progress
-              )})`
+            `Parcels: ${featureCount} · Progress ${progress.completed ?? "?"}/${progress.total ?? "?"} (${hintsFromProgress(
+              progress
+            )})`
           );
         } else {
           updateJobMeta(`Parcels returned: ${featureCount}`);
         }
-        addLogEntry("Geo update", { featureCount, progress, raw: data });
+        addLogEntry("Geo update", { featureCount, progress, raw: collection });
       } catch (err) {
         console.warn("Geo polling error", err);
         addLogEntry("Geo polling error", { error: err.message }, "error");
@@ -954,6 +955,63 @@
       if (progress.extra?.running) hints.push(`${progress.extra.running} running`);
       if (progress.extra?.remaining) hints.push(`${progress.extra.remaining} remaining`);
       return hints.length ? hints.join(", ") : "no queue";
+    }
+
+    function sampleCoordinate(coords) {
+      if (!Array.isArray(coords)) return null;
+      if (coords.length >= 2 && Number.isFinite(coords[0]) && Number.isFinite(coords[1])) {
+        return coords;
+      }
+      for (const item of coords) {
+        const found = sampleCoordinate(item);
+        if (found) return found;
+      }
+      return null;
+    }
+
+    function isLngLat(coord) {
+      if (!Array.isArray(coord) || coord.length < 2) return true;
+      return Math.abs(coord[0]) <= 180 && Math.abs(coord[1]) <= 90;
+    }
+
+    function mercatorToLngLat(coord) {
+      if (!Array.isArray(coord) || coord.length < 2) return coord;
+      const [x, y] = coord;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return coord;
+      const lng = (x / 20037508.34) * 180;
+      let lat = (y / 20037508.34) * 180;
+      lat = (180 / Math.PI) * (2 * Math.atan(Math.exp((lat * Math.PI) / 180)) - Math.PI / 2);
+      return [lng, lat];
+    }
+
+    function convertCoordinates(coords) {
+      if (!Array.isArray(coords)) return coords;
+      if (coords.length >= 2 && typeof coords[0] === "number") {
+        return mercatorToLngLat(coords);
+      }
+      return coords.map((sub) => convertCoordinates(sub));
+    }
+
+    function convertGeometryToLngLat(geometry) {
+      if (!geometry || !geometry.coordinates) return geometry;
+      const sample = sampleCoordinate(geometry.coordinates);
+      if (!sample || isLngLat(sample)) return geometry;
+      return {
+        ...geometry,
+        coordinates: convertCoordinates(geometry.coordinates)
+      };
+    }
+
+    function convertFeatureCollectionToLngLat(collection) {
+      if (!collection || !Array.isArray(collection.features)) return collection;
+      const features = collection.features.map((feature) => {
+        if (!feature?.geometry) return feature;
+        return {
+          ...feature,
+          geometry: convertGeometryToLngLat(feature.geometry)
+        };
+      });
+      return { ...collection, features };
     }
 
     async function fetchJobLogs(jobId) {

@@ -882,14 +882,14 @@
         const progress = extractProgress(data);
         if (progress) {
           updateJobMeta(
-            `Parcels: ${featureCount} · Progress ${progress.completed ?? "?"}/${progress.total ?? "?"} (${hintsFromProgress(
-              progress
-            )})`
+              `Parcels: ${featureCount} · Progress ${progress.completed ?? "?"}/${progress.total ?? "?"} (${hintsFromProgress(
+                progress
+              )})`
           );
         } else {
           updateJobMeta(`Parcels returned: ${featureCount}`);
         }
-        addLogEntry("Geo update", { featureCount, progress });
+        addLogEntry("Geo update", { featureCount, progress, raw: data });
       } catch (err) {
         console.warn("Geo polling error", err);
         addLogEntry("Geo polling error", { error: err.message }, "error");

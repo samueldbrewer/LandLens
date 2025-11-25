@@ -1010,20 +1010,33 @@
       try {
         const data = await fetchJSON(`/jobs/${encodeURIComponent(appState.job.id)}/geo`);
         const normalized = normalizeGeoResponse(data);
-        const collection = convertFeatureCollectionToLngLat(normalized);
-        updateJobSource(collection);
-        const featureCount = Array.isArray(collection.features) ? collection.features.length : 0;
-        const progress = extractProgress(data);
-        if (progress) {
-          updateJobMeta(
-            `Parcels: ${featureCount} · Progress ${progress.completed ?? "?"}/${progress.total ?? "?"} (${hintsFromProgress(
-              progress
-            )})`
-          );
+        if (Array.isArray(normalized.features) && normalized.features.length) {
+          const collection = convertFeatureCollectionToLngLat(normalized);
+          updateJobSource(collection);
+          const featureCount = collection.features.length;
+          const progress = extractProgress(data);
+          if (progress) {
+            updateJobMeta(
+              `Parcels: ${featureCount} · Progress ${progress.completed ?? "?"}/${progress.total ?? "?"} (${hintsFromProgress(
+                progress
+              )})`
+            );
+          } else {
+            updateJobMeta(`Parcels returned: ${featureCount}`);
+          }
+          addLogEntry("Geo update", { featureCount, progress, raw: collection });
         } else {
-          updateJobMeta(`Parcels returned: ${featureCount}`);
+          const progress = extractProgress(data);
+          if (progress) {
+            updateJobMeta(
+              `Parcels pending · Progress ${progress.completed ?? "?"}/${progress.total ?? "?"} (${hintsFromProgress(
+                progress
+              )})`
+            );
+          } else {
+            updateJobMeta("No parcel GeoJSON yet.");
+          }
         }
-        addLogEntry("Geo update", { featureCount, progress, raw: collection });
       } catch (err) {
         console.warn("Geo polling error", err);
         addLogEntry("Geo polling error", { error: err.message }, "error");
@@ -1037,8 +1050,10 @@
         const manifest = await fetchJSON(`/jobs/${encodeURIComponent(appState.job.id)}/artifacts`);
         const parcels = manifest?.artifacts?.parcels || [];
         if (!parcels.length) return;
+        const fetchLimit = 1;
+        const toFetch = parcels.slice(0, fetchLimit);
         const datasets = await Promise.all(
-          parcels.map(async (entry) => {
+          toFetch.map(async (entry) => {
             const url = entry?.placements_json_url;
             if (!url) return null;
             if (appState.overlayCache.placements[url]) {
@@ -1056,6 +1071,7 @@
             }
           })
         );
+        if (!datasets.length) return;
         const overlay = buildOverlayFromPlacements(datasets.filter(Boolean));
         updateOverlaySources(overlay);
       } catch (err) {

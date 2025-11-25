@@ -208,18 +208,6 @@
       margin-top: 4px;
     }
 
-    .monitoring-section ul {
-      padding-left: 18px;
-      margin: 6px 0 0;
-      color: #475569;
-      font-size: 0.8rem;
-      line-height: 1.4;
-    }
-
-    .monitoring-section strong {
-      color: #0f172a;
-    }
-
     .log-tail-label {
       margin-top: 10px;
       font-size: 0.85rem;
@@ -287,15 +275,7 @@
         <button id="cancelJobBtn" class="btn-secondary" type="button" disabled>Cancel active job</button>
       </div>
     </div>
-    <div class="panel-section monitoring-section desktop-only">
-      <div>
-        <strong>Monitoring tips</strong>
-        <ul>
-          <li>Use <code>/jobs/{id}</code> for status + <em>log_tail</em> to ensure the worker is active.</li>
-          <li><code>/jobs/{id}/geo</code> fills once parcels finish a cycle — empty GeoJSON usually means the run is still queued or underway.</li>
-          <li>Cancel stuck runs via <code>/jobs/{id}/cancel</code> after confirming the log tail is idle.</li>
-        </ul>
-      </div>
+    <div class="panel-section desktop-only">
       <div class="log-tail-label">Latest worker log tail</div>
       <pre id="logTail" class="log-tail">No log output yet.</pre>
     </div>

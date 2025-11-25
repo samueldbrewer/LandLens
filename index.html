@@ -274,6 +274,9 @@
       <div class="panel-actions">
         <button id="cancelJobBtn" class="btn-secondary" type="button" disabled>Cancel active job</button>
       </div>
+      <p class="panel-status" style="margin:4px 0 0;">
+        Cancelling uses <code>/jobs/{id}/cancel</code> per the service guide; check the log tail to confirm the worker has stopped.
+      </p>
     </div>
     <div class="panel-section desktop-only">
       <div class="log-tail-label">Latest worker log tail</div>

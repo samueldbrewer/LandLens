@@ -347,7 +347,8 @@
       jobMarker: null,
       logs: [],
       overlayCache: {
-        placements: {}
+        data: {},
+        index: 0
       },
       overlayData: {
         parcels: EMPTY_GEOJSON,
@@ -1049,30 +1050,49 @@
       try {
         const manifest = await fetchJSON(`/jobs/${encodeURIComponent(appState.job.id)}/artifacts`);
         const parcels = manifest?.artifacts?.parcels || [];
-        if (!parcels.length) return;
-        const fetchLimit = 1;
-        const toFetch = parcels.slice(0, fetchLimit);
-        const datasets = await Promise.all(
-          toFetch.map(async (entry) => {
-            const url = entry?.placements_json_url;
-            if (!url) return null;
-            if (appState.overlayCache.placements[url]) {
-              return appState.overlayCache.placements[url];
-            }
+        if (!parcels.length) {
+          clearOverlayData();
+          return;
+        }
+        const urls = parcels
+          .map((entry) => entry?.placements_json_url)
+          .filter(Boolean);
+        if (!urls.length) {
+          clearOverlayData();
+          return;
+        }
+        // Remove cache entries for parcels no longer referenced
+        const cache = appState.overlayCache;
+        Object.keys(cache.data).forEach((url) => {
+          if (!urls.includes(url)) {
+            delete cache.data[url];
+          }
+        });
+        const fetchLimit = Math.min(3, urls.length);
+        if (cache.index >= urls.length) cache.index = 0;
+        const toFetch = [];
+        for (let i = 0; i < fetchLimit; i++) {
+          const idx = (cache.index + i) % urls.length;
+          toFetch.push(urls[idx]);
+        }
+        cache.index = (cache.index + fetchLimit) % urls.length;
+
+        await Promise.all(
+          toFetch.map(async (url) => {
             try {
-              const data = await fetchExternalJSON(url);
+              const data = await fetchExternalJSON(url, { cache: "no-store" });
               if (data) {
-                appState.overlayCache.placements[url] = data;
+                cache.data[url] = data;
               }
-              return data;
             } catch (err) {
               addLogEntry("Placement fetch error", { url, error: err.message }, "error");
-              return null;
             }
           })
         );
-        if (!datasets.length) return;
-        const overlay = buildOverlayFromPlacements(datasets.filter(Boolean));
+
+        const overlay = buildOverlayFromPlacements(
+          Object.values(cache.data).filter(Boolean)
+        );
         updateOverlaySources(overlay);
       } catch (err) {
         console.warn("Artifact polling error", err);
@@ -1257,7 +1277,8 @@
         shadows: EMPTY_GEOJSON,
         labels: EMPTY_GEOJSON
       });
-      appState.overlayCache.placements = {};
+      appState.overlayCache.data = {};
+      appState.overlayCache.index = 0;
     }
 
     function findCoordinateArray(source, keys) {

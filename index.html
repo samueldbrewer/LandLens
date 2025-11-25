@@ -305,8 +305,17 @@
     const JOB_SOURCE_ID = "job-parcels";
     const JOB_FILL_LAYER_ID = "job-parcels-fill";
     const JOB_LINE_LAYER_ID = "job-parcels-outline";
+    const PARCEL_BOUNDARY_SOURCE_ID = "parcel-boundaries";
+    const PARCEL_BOUNDARY_LAYER_ID = "parcel-boundaries-fill";
+    const PLACEMENT_SOURCE_ID = "parcel-placements";
+    const PLACEMENT_LAYER_ID = "parcel-placements-fill";
+    const SHADOW_SOURCE_ID = "parcel-shadows";
+    const SHADOW_LAYER_ID = "parcel-shadows-fill";
+    const PLACEMENT_LABEL_SOURCE_ID = "placement-labels";
+    const PLACEMENT_LABEL_LAYER_ID = "placement-labels-symbol";
     const JOB_STATUS_POLL_MS = 5000;
     const JOB_GEO_POLL_MS = 4000;
+    const JOB_ARTIFACT_POLL_MS = 8000;
     const EMPTY_GEOJSON = { type: "FeatureCollection", features: [] };
 
     maplibregl.workerUrl = "./maplibre-gl-csp-worker.js";
@@ -333,10 +342,19 @@
       designs: [],
       selectedDesign: null,
       job: null,
-      pollTimers: { status: null, geo: null },
+      pollTimers: { status: null, geo: null, artifacts: null },
       abortControllers: new Set(),
       jobMarker: null,
-      logs: []
+      logs: [],
+      overlayCache: {
+        placements: {}
+      },
+      overlayData: {
+        parcels: EMPTY_GEOJSON,
+        placements: EMPTY_GEOJSON,
+        shadows: EMPTY_GEOJSON,
+        labels: EMPTY_GEOJSON
+      }
     };
     const LOG_LIMIT = 200;
     const LOG_TAIL_DEFAULT = "No log output yet.";
@@ -574,6 +592,7 @@
         clearTimeout(loadTimeout);
         setStatus("Map style loaded, waiting for tiles...");
         initializeJobLayers();
+        initializeOverlaySources();
         attachLongPressHandler();
         map.on("click", handleMapClick);
       });
@@ -618,6 +637,93 @@
       });
     }
 
+    function initializeOverlaySources() {
+      if (!map) return;
+      if (!map.getSource(PARCEL_BOUNDARY_SOURCE_ID)) {
+        map.addSource(PARCEL_BOUNDARY_SOURCE_ID, {
+          type: "geojson",
+          data: EMPTY_GEOJSON
+        });
+        map.addLayer({
+          id: PARCEL_BOUNDARY_LAYER_ID,
+          type: "line",
+          source: PARCEL_BOUNDARY_SOURCE_ID,
+          paint: {
+            "line-color": "#10b981",
+            "line-width": 2,
+            "line-dasharray": [2, 2]
+          }
+        });
+      }
+      if (!map.getSource(SHADOW_SOURCE_ID)) {
+        map.addSource(SHADOW_SOURCE_ID, {
+          type: "geojson",
+          data: EMPTY_GEOJSON
+        });
+        map.addLayer({
+          id: SHADOW_LAYER_ID,
+          type: "fill",
+          source: SHADOW_SOURCE_ID,
+          paint: {
+            "fill-color": "#a21caf",
+            "fill-opacity": 0.25
+          }
+        });
+      }
+      if (!map.getSource(PLACEMENT_SOURCE_ID)) {
+        map.addSource(PLACEMENT_SOURCE_ID, {
+          type: "geojson",
+          data: EMPTY_GEOJSON
+        });
+        map.addLayer({
+          id: PLACEMENT_LAYER_ID,
+          type: "fill",
+          source: PLACEMENT_SOURCE_ID,
+          paint: {
+            "fill-color": [
+              "case",
+              ["==", ["get", "isBest"], true],
+              "#f97316",
+              "#2563eb"
+            ],
+            "fill-opacity": [
+              "case",
+              ["==", ["get", "isBest"], true],
+              0.5,
+              0.2
+            ],
+            "fill-outline-color": "#1f2937"
+          }
+        });
+      }
+      if (!map.getSource(PLACEMENT_LABEL_SOURCE_ID)) {
+        map.addSource(PLACEMENT_LABEL_SOURCE_ID, {
+          type: "geojson",
+          data: EMPTY_GEOJSON
+        });
+        map.addLayer({
+          id: PLACEMENT_LABEL_LAYER_ID,
+          type: "symbol",
+          source: PLACEMENT_LABEL_SOURCE_ID,
+          layout: {
+            "text-field": [
+              "case",
+              ["has", "score"],
+              ["concat", "Score ", ["get", "score"]],
+              ""
+            ],
+            "text-size": 12,
+            "text-anchor": "center"
+          },
+          paint: {
+            "text-color": "#111827",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1
+          }
+        });
+      }
+    }
+
     function updateJobSource(data) {
       if (!map) return;
       const source = map.getSource(JOB_SOURCE_ID);
@@ -649,6 +755,25 @@
         if (!options.signal) {
           appState.abortControllers.delete(controller);
         }
+      }
+    }
+
+    async function fetchExternalJSON(url, options = {}) {
+      if (!url) return null;
+      const controller = new AbortController();
+      const signal = options.signal || controller.signal;
+      const headers = options.headers ? { ...options.headers } : {};
+      const fetchOptions = { ...options, headers, signal };
+      appState.abortControllers.add(controller);
+      try {
+        const response = await fetch(url, fetchOptions);
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(body || response.statusText || `Request failed (${response.status})`);
+        }
+        return response.json();
+      } finally {
+        appState.abortControllers.delete(controller);
       }
     }
 
@@ -748,6 +873,7 @@
       if (!design) return;
       setControlsDisabled(true);
       updateJobSource(EMPTY_GEOJSON);
+      clearOverlayData();
       updateJobMeta("");
       updateJobStatus("Preparing job...");
       let address;
@@ -820,8 +946,13 @@
       clearJobPolling();
       fetchJobStatus();
       fetchJobGeo();
+      fetchJobArtifacts();
       appState.pollTimers.status = setInterval(fetchJobStatus, JOB_STATUS_POLL_MS);
       appState.pollTimers.geo = setInterval(fetchJobGeo, JOB_GEO_POLL_MS);
+      appState.pollTimers.artifacts = setInterval(
+        fetchJobArtifacts,
+        JOB_ARTIFACT_POLL_MS
+      );
     }
 
     function clearJobPolling() {
@@ -832,6 +963,10 @@
       if (appState.pollTimers.geo) {
         clearInterval(appState.pollTimers.geo);
         appState.pollTimers.geo = null;
+      }
+      if (appState.pollTimers.artifacts) {
+        clearInterval(appState.pollTimers.artifacts);
+        appState.pollTimers.artifacts = null;
       }
     }
 
@@ -894,6 +1029,40 @@
         addLogEntry("Geo polling error", { error: err.message }, "error");
       }
     }
+
+    async function fetchJobArtifacts() {
+      if (!appState.job) return;
+      addLogEntry("GET /jobs/{id}/artifacts", { id: appState.job.id });
+      try {
+        const manifest = await fetchJSON(`/jobs/${encodeURIComponent(appState.job.id)}/artifacts`);
+        const parcels = manifest?.artifacts?.parcels || [];
+        if (!parcels.length) return;
+        const datasets = await Promise.all(
+          parcels.map(async (entry) => {
+            const url = entry?.placements_json_url;
+            if (!url) return null;
+            if (appState.overlayCache.placements[url]) {
+              return appState.overlayCache.placements[url];
+            }
+            try {
+              const data = await fetchExternalJSON(url);
+              if (data) {
+                appState.overlayCache.placements[url] = data;
+              }
+              return data;
+            } catch (err) {
+              addLogEntry("Placement fetch error", { url, error: err.message }, "error");
+              return null;
+            }
+          })
+        );
+        const overlay = buildOverlayFromPlacements(datasets.filter(Boolean));
+        updateOverlaySources(overlay);
+      } catch (err) {
+        console.warn("Artifact polling error", err);
+        addLogEntry("Artifact polling error", { error: err.message }, "error");
+      }
+    }
     function normalizeGeoResponse(payload) {
       if (!payload) return EMPTY_GEOJSON;
       if (payload.type === "FeatureCollection" && Array.isArray(payload.features)) {
@@ -954,6 +1123,307 @@
       if (progress.extra?.remaining) hints.push(`${progress.extra.remaining} remaining`);
       return hints.length ? hints.join(", ") : "no queue";
     }
+    function sampleCoordinate(coords) {
+      if (!Array.isArray(coords)) return null;
+      if (coords.length >= 2 && Number.isFinite(coords[0]) && Number.isFinite(coords[1])) return coords;
+      for (const item of coords) {
+        const found = sampleCoordinate(item);
+        if (found) return found;
+      }
+      return null;
+    }
+
+    function isLngLat(coord) {
+      if (!Array.isArray(coord) || coord.length < 2) return true;
+      return Math.abs(coord[0]) <= 180 && Math.abs(coord[1]) <= 90;
+    }
+
+    function mercatorToLngLat(coord) {
+      if (!Array.isArray(coord) || coord.length < 2) return coord;
+      const [x, y] = coord;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return coord;
+      const lng = (x / 20037508.34) * 180;
+      let lat = (y / 20037508.34) * 180;
+      lat = (180 / Math.PI) * (2 * Math.atan(Math.exp((lat * Math.PI) / 180)) - Math.PI / 2);
+      return [lng, lat];
+    }
+
+    function convertCoordinates(coords) {
+      if (!Array.isArray(coords)) return coords;
+      if (coords.length >= 2 && typeof coords[0] === "number") {
+        return mercatorToLngLat(coords);
+      }
+      return coords.map((sub) => convertCoordinates(sub));
+    }
+
+    function convertCoordsIfNeeded(coords) {
+      if (!Array.isArray(coords)) return coords;
+      const sample = sampleCoordinate(coords);
+      if (!sample || isLngLat(sample)) return coords;
+      return convertCoordinates(coords);
+    }
+
+    function boundsToPolygon(bounds) {
+      if (!bounds) return null;
+      const { xmin, ymin, xmax, ymax } = bounds;
+      if (
+        [xmin, ymin, xmax, ymax].some(
+          (value) => typeof value !== "number" || Number.isNaN(value)
+        )
+      ) {
+        return null;
+      }
+      return [
+        [xmin, ymin],
+        [xmax, ymin],
+        [xmax, ymax],
+        [xmin, ymax],
+        [xmin, ymin]
+      ];
+    }
+
+    function computeCentroid(coords) {
+      if (!Array.isArray(coords) || !coords.length) return null;
+      const flat = coords.flat(Infinity);
+      if (!flat.length) return null;
+      const points = [];
+      function collect(array) {
+        if (array.length >= 2 && typeof array[0] === "number") {
+          points.push(array);
+        } else {
+          array.forEach(collect);
+        }
+      }
+      collect(coords);
+      if (!points.length) return null;
+      const sum = points.reduce(
+        (acc, [x, y]) => {
+          acc[0] += x;
+          acc[1] += y;
+          return acc;
+        },
+        [0, 0]
+      );
+      return [sum[0] / points.length, sum[1] / points.length];
+    }
+
+    function createFeatureFromCoords(coords, properties = {}) {
+      if (!coords) return null;
+      const converted = convertCoordsIfNeeded(coords);
+      return {
+        type: "Feature",
+        geometry: { type: "Polygon", coordinates: [converted] },
+        properties
+      };
+    }
+
+    function updateOverlaySources(data) {
+      appState.overlayData = data;
+      if (!map) return;
+      if (map.getSource(PARCEL_BOUNDARY_SOURCE_ID)) {
+        map.getSource(PARCEL_BOUNDARY_SOURCE_ID).setData(data.parcels || EMPTY_GEOJSON);
+      }
+      if (map.getSource(PLACEMENT_SOURCE_ID)) {
+        map.getSource(PLACEMENT_SOURCE_ID).setData(data.placements || EMPTY_GEOJSON);
+      }
+      if (map.getSource(SHADOW_SOURCE_ID)) {
+        map.getSource(SHADOW_SOURCE_ID).setData(data.shadows || EMPTY_GEOJSON);
+      }
+      if (map.getSource(PLACEMENT_LABEL_SOURCE_ID)) {
+        map.getSource(PLACEMENT_LABEL_SOURCE_ID).setData(data.labels || EMPTY_GEOJSON);
+      }
+    }
+
+    function clearOverlayData() {
+      updateOverlaySources({
+        parcels: EMPTY_GEOJSON,
+        placements: EMPTY_GEOJSON,
+        shadows: EMPTY_GEOJSON,
+        labels: EMPTY_GEOJSON
+      });
+      appState.overlayCache.placements = {};
+    }
+
+    function findCoordinateArray(source, keys) {
+      if (!source) return null;
+      for (const key of keys) {
+        const candidate = source[key];
+        if (Array.isArray(candidate)) {
+          const sample = sampleCoordinate(candidate);
+          if (sample) return candidate;
+        }
+      }
+      return null;
+    }
+
+    function createParcelFeature(data) {
+      if (!data?.parcel) return null;
+      let coords = data.parcel.polygon || data.parcel.geometry || data.parcel.coordinates;
+      if (!coords) {
+        const boundsPolygon = boundsToPolygon(data.parcel._bounds);
+        coords = boundsPolygon ? [boundsPolygon] : null;
+      }
+      if (!coords) return null;
+      const converted = convertCoordsIfNeeded(coords);
+      const geometry = converted[0] && Array.isArray(converted[0][0]) ? { type: "Polygon", coordinates: converted } : { type: "Polygon", coordinates: [converted] };
+      return {
+        type: "Feature",
+        geometry,
+        properties: {
+          parcelId: data.parcel.LOWPARCELID || data.parcel.parcel_id || data.summary?.parcel_id,
+          address: data.parcel.SITEADDRESS || data.summary?.address
+        }
+      };
+    }
+
+    function createPlacementFeature(placement, parcelId, isBest) {
+      const coords = findCoordinateArray(placement, [
+        "footprint",
+        "footprint_points",
+        "footprint_polygon",
+        "placement",
+        "outline"
+      ]);
+      if (!coords) return null;
+      const converted = convertCoordsIfNeeded(coords);
+      const geometry =
+        converted[0] && Array.isArray(converted[0][0])
+          ? { type: "Polygon", coordinates: converted }
+          : { type: "Polygon", coordinates: [converted] };
+      const composite =
+        placement.composite_score ??
+        placement.composite ??
+        placement.score ??
+        placement.score_total ??
+        placement.scores?.composite ??
+        null;
+      return {
+        type: "Feature",
+        geometry,
+        properties: {
+          parcelId,
+          score: composite != null ? Number(composite).toFixed(2) : "n/a",
+          rawScore: composite,
+          isBest: Boolean(isBest)
+        }
+      };
+    }
+
+    function createShadowFeature(placement, parcelId, isBest) {
+      const coords = findCoordinateArray(placement, [
+        "shadow",
+        "shadow_polygon",
+        "shadow_outline"
+      ]);
+      if (!coords) return null;
+      const converted = convertCoordsIfNeeded(coords);
+      const geometry =
+        converted[0] && Array.isArray(converted[0][0])
+          ? { type: "Polygon", coordinates: converted }
+          : { type: "Polygon", coordinates: [converted] };
+      return {
+        type: "Feature",
+        geometry,
+        properties: {
+          parcelId,
+          isBest: Boolean(isBest)
+        }
+      };
+    }
+
+    function createLabelFeature(feature) {
+      if (!feature?.geometry?.coordinates) return null;
+      const centroid = computeCentroid(feature.geometry.coordinates);
+      if (!centroid) return null;
+      const converted = convertCoordsIfNeeded([centroid])[0];
+      return {
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: converted
+        },
+        properties: {
+          parcelId: feature.properties?.parcelId,
+          score: feature.properties?.score,
+          isBest: feature.properties?.isBest
+        }
+      };
+    }
+
+    function buildOverlayFromPlacements(datasets) {
+      const parcelFeatures = [];
+      const placementFeatures = [];
+      const shadowFeatures = [];
+      const labelFeatures = [];
+
+      datasets.forEach((dataset) => {
+        if (!dataset) return;
+        const parcelId =
+          dataset.summary?.parcel_id ||
+          dataset.parcel?.LOWPARCELID ||
+          dataset.parcel?.parcel_id;
+        const parcelFeature = createParcelFeature(dataset);
+        if (parcelFeature) parcelFeatures.push(parcelFeature);
+        const placements = Array.isArray(dataset.placements)
+          ? dataset.placements
+          : [];
+        if (!placements.length) return;
+        let bestScore = -Infinity;
+        placements.forEach((placement) => {
+          const composite =
+            placement.composite_score ??
+            placement.composite ??
+            placement.score ??
+            placement.score_total ??
+            placement.scores?.composite ??
+            null;
+          if (composite != null) {
+            const numericScore = Number(composite);
+            if (!Number.isNaN(numericScore) && numericScore > bestScore) {
+              bestScore = numericScore;
+            }
+          }
+        });
+        placements.forEach((placement) => {
+          const composite =
+            placement.composite_score ??
+            placement.composite ??
+            placement.score ??
+            placement.score_total ??
+            placement.scores?.composite ??
+            null;
+          const numericScore = Number(composite);
+          const isBest =
+            bestScore !== -Infinity && !Number.isNaN(numericScore)
+              ? numericScore === bestScore
+              : false;
+          const placementFeature = createPlacementFeature(
+            placement,
+            parcelId,
+            isBest
+          );
+          if (placementFeature) {
+            placementFeatures.push(placementFeature);
+            const labelFeature = createLabelFeature(placementFeature);
+            if (labelFeature) labelFeatures.push(labelFeature);
+          }
+          const shadowFeature = createShadowFeature(
+            placement,
+            parcelId,
+            isBest
+          );
+          if (shadowFeature) shadowFeatures.push(shadowFeature);
+        });
+      });
+
+      return {
+        parcels: { type: "FeatureCollection", features: parcelFeatures },
+        placements: { type: "FeatureCollection", features: placementFeatures },
+        shadows: { type: "FeatureCollection", features: shadowFeatures },
+        labels: { type: "FeatureCollection", features: labelFeatures }
+      };
+    }
+
 
     function sampleCoordinate(coords) {
       if (!Array.isArray(coords)) return null;
@@ -1039,6 +1509,7 @@
       addLogEntry("Job finalized", { message });
       appState.job = null;
       updateLogTail("", LOG_TAIL_DEFAULT);
+      clearOverlayData();
     }
 
     function abortOngoingApiCalls() {
@@ -1063,6 +1534,7 @@
       ui.cancelJobBtn.disabled = true;
       updateJobSource(EMPTY_GEOJSON);
       updateLogTail("", LOG_TAIL_DEFAULT);
+      clearOverlayData();
     }
 
     function sendCancellationSignal(jobId, reason) {

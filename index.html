@@ -50,6 +50,14 @@
       display: none;
     }
 
+    body.mobile-mode .desktop-only {
+      display: none !important;
+    }
+
+    body:not(.mobile-mode) .mobile-only {
+      display: none !important;
+    }
+
     .control-panel {
       position: absolute;
       top: 12px;
@@ -235,6 +243,10 @@
     @media (max-width: 640px) {
       .control-panel {
         width: calc(100% - 24px);
+        left: 12px;
+        right: 12px;
+        top: auto;
+        bottom: 12px;
       }
 
       .panel-actions {
@@ -252,6 +264,9 @@
     <div class="panel-section">
       <h1>Land Lens Runner</h1>
       <p>Select a saved shrink-wrap, then click a spot on the map to start a crawl.</p>
+    </div>
+    <div class="panel-section mobile-only">
+      <p style="margin:0;color:#475569;font-size:0.9rem;">Tap anywhere on the map after picking a design. We'll stream results below.</p>
     </div>
     <div class="panel-section">
       <label>
@@ -272,7 +287,7 @@
         <button id="cancelJobBtn" class="btn-secondary" type="button" disabled>Cancel active job</button>
       </div>
     </div>
-    <div class="panel-section monitoring-section">
+    <div class="panel-section monitoring-section desktop-only">
       <div>
         <strong>Monitoring tips</strong>
         <ul>
@@ -284,7 +299,7 @@
       <div class="log-tail-label">Latest worker log tail</div>
       <pre id="logTail" class="log-tail">No log output yet.</pre>
     </div>
-    <div class="panel-section log-section">
+    <div class="panel-section log-section desktop-only">
       <div class="log-header">
         <div>
           <strong style="color:#0f172a;">Run log</strong>
@@ -1162,6 +1177,15 @@
 
     renderLog();
     updateLogTail("", LOG_TAIL_DEFAULT);
+    function detectMobile() {
+      const mobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const smallScreen = window.matchMedia("(max-width: 768px)").matches;
+      if (mobileUA || smallScreen) {
+        document.body.classList.add("mobile-mode");
+      }
+    }
+
+    detectMobile();
     initMap();
     loadDesigns();
     updateJobStatus("Select a design, then click the map.");

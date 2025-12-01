@@ -352,6 +352,7 @@ Select a design to preview shrink-wrap metadata.</pre
       const JOB_ARTIFACT_POLL_MS = 8000;
       const EMPTY_GEOJSON = { type: "FeatureCollection", features: [] };
 
+      maplibregl.workerUrl = "./maplibre-gl-csp-worker.js";
       maplibregl.workerCount = 2;
       let map;
       let longPressTimer;

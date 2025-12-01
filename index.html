@@ -1545,9 +1545,6 @@
     ui.refreshDesignsBtn.addEventListener("click", loadDesigns);
     ui.designSelect.addEventListener("change", handleDesignChange);
     ui.cancelJobBtn.addEventListener("click", () => cancelActiveJob("Job cancelled by user.", true));
-    if (ui.clearLogBtn) {
-      ui.clearLogBtn.addEventListener("click", clearLog);
-    }
 
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
@@ -1559,8 +1556,6 @@
       cancelActiveJob("Page closing. Cancelling crawl.", true);
     });
 
-    renderLog();
-    updateLogTail("", LOG_TAIL_DEFAULT);
     function detectMobile() {
       const mobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       const smallScreen = window.matchMedia("(max-width: 768px)").matches;

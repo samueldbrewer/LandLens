@@ -283,6 +283,22 @@
         </div>
         <div id="designStatus" class="panel-status"></div>
       </div>
+      <div class="panel-section" id="designPreviewSection">
+        <strong style="color: #0f172a">Design preview</strong>
+        <pre
+          id="designPreview"
+          style="
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 10px;
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+          "
+        >
+Select a design to preview shrink-wrap metadata.</pre
+        >
+      </div>
       <div class="panel-section">
         <div id="jobStatusText" class="job-status">
           Select a design, then click the map.
@@ -302,12 +318,6 @@
           Cancelling uses <code>/jobs/{id}/cancel</code> per the service guide;
           check the log tail to confirm the worker has stopped.
         </p>
-      </div>
-      <div class="panel-section desktop-only">
-        <strong style="color: #0f172a">Map layers</strong>
-        <div class="panel-status" id="layerStatus">
-          Parcels, placements, and shadows update live as jobs run.
-        </div>
       </div>
       <div class="panel-section desktop-only" id="layerSummary">
         <div class="panel-status" id="parcelSummary">Parcels: 0</div>
@@ -361,6 +371,7 @@
         placementSummary: document.getElementById("placementSummary"),
         shadowSummary: document.getElementById("shadowSummary"),
         logTail: document.getElementById("logTail"),
+        designPreview: document.getElementById("designPreview"),
       };
 
       const appState = {
@@ -380,7 +391,102 @@
           shadows: EMPTY_GEOJSON,
           labels: EMPTY_GEOJSON,
         },
+        designPreviews: {},
       };
+
+      function getDesignFilename(design) {
+        const url = design?.dxf_url;
+        if (!url) return null;
+        try {
+          if (url.startsWith("file://")) {
+            const path = url.replace("file://", "");
+            const parts = path.split("/").filter(Boolean);
+            return parts.pop();
+          }
+          const parsed = new URL(url);
+          const segments = parsed.pathname.split("/").filter(Boolean);
+          return segments.pop();
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function resetDesignPreview() {
+        if (!ui.designPreview) return;
+        ui.designPreview.textContent =
+          "Select a design to preview shrink-wrap metadata.";
+      }
+
+      function renderDesignPreview(design, previewData) {
+        if (!ui.designPreview) return;
+        if (!design) {
+          resetDesignPreview();
+          return;
+        }
+        const lines = [];
+        lines.push(`Name: ${design.name || design.slug || "Untitled"}`);
+        const footprintCount = design?.footprint_points?.length;
+        lines.push(
+          `Footprint points: ${
+            typeof footprintCount === "number" ? footprintCount : "n/a"
+          }`,
+        );
+        lines.push(
+          `Front direction: ${
+            design?.front_direction
+              ? JSON.stringify(design.front_direction)
+              : "auto"
+          }`,
+        );
+        if (previewData) {
+          lines.push(
+            `Preview rectangle: ${
+              previewData.rectangle_points
+                ? JSON.stringify(previewData.rectangle_points)
+                : "n/a"
+            }`,
+          );
+          lines.push(
+            `Preview frontage: ${
+              previewData.front_points
+                ? JSON.stringify(previewData.front_points)
+                : "n/a"
+            }`,
+          );
+        }
+        ui.designPreview.textContent = lines.join("\n");
+      }
+
+      async function updateDesignPreview(design) {
+        if (!design) {
+          resetDesignPreview();
+          return;
+        }
+        const cacheKey =
+          design.slug || design.id || design.name || design.dxf_url;
+        if (appState.designPreviews[cacheKey]) {
+          renderDesignPreview(design, appState.designPreviews[cacheKey]);
+          return;
+        }
+        renderDesignPreview(design);
+        const filename = getDesignFilename(design);
+        if (!filename) return;
+        try {
+          const preview = await fetchJSON(
+            `/files/${encodeURIComponent(filename)}/preview`,
+          );
+          if (preview) {
+            appState.designPreviews[cacheKey] = preview;
+            renderDesignPreview(design, preview);
+          }
+        } catch (err) {
+          logMessage(
+            "Design preview fetch failed",
+            { error: err.message },
+            "error",
+          );
+        }
+      }
 
       function setStatus(message, type = "info") {
         if (!message) {
@@ -787,10 +893,16 @@
             `Loaded ${designs.length} design${designs.length === 1 ? "" : "s"}.`,
           );
           logMessage("Designs loaded", { count: designs.length });
+          if (designs.length) {
+            updateDesignPreview(designs[0]);
+          } else {
+            resetDesignPreview();
+          }
         } catch (err) {
           console.error(err);
           setDesignStatus(`Failed to load designs: ${err.message}`, "error");
           logMessage("Design load failed", { error: err.message }, "error");
+          resetDesignPreview();
         }
       }
 
@@ -825,6 +937,7 @@
           appState.selectedDesign = null;
           updateJobStatus("Select a design, then click the map.");
           updateJobMeta("");
+          resetDesignPreview();
           return;
         }
         const design = appState.designs[Number(option.dataset.index)];
@@ -840,6 +953,7 @@
               : "auto"
           }`,
         );
+        updateDesignPreview(design);
       }
 
       async function handleMapClick(event) {

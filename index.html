@@ -411,6 +411,22 @@ Select a design to preview shrink-wrap metadata.</pre
         }
       }
 
+      function normalizeArtifactUrl(url) {
+        if (!url) return null;
+        try {
+          if (url.startsWith("/")) return url;
+          if (url.startsWith("http://landlens.up.railway.app")) {
+            return url.replace(
+              "http://landlens.up.railway.app",
+              "https://landlens.up.railway.app",
+            );
+          }
+          return url;
+        } catch (err) {
+          return url;
+        }
+      }
+
       function resetDesignPreview() {
         if (!ui.designPreview) return;
         ui.designPreview.textContent =
@@ -1857,21 +1873,3 @@ Select a design to preview shrink-wrap metadata.</pre
     </script>
   </body>
 </html>
-      function normalizeArtifactUrl(url) {
-        if (!url) return null;
-        try {
-          if (url.startsWith("/")) return url;
-          if (url.startsWith("http://landlens.up.railway.app")) {
-            return url.replace(
-              "http://landlens.up.railway.app",
-              "https://landlens.up.railway.app",
-            );
-          }
-          if (!url.startsWith("http") && !url.startsWith("//")) {
-            return url;
-          }
-          return url;
-        } catch (err) {
-          return url;
-        }
-      }

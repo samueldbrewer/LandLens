@@ -287,6 +287,10 @@
       <div class="panel-status" id="placementSummary">Placements: 0</div>
       <div class="panel-status" id="shadowSummary">Shadows: 0</div>
     </div>
+    <div class="panel-section desktop-only">
+      <strong style="color:#0f172a;">Backend log (latest)</strong>
+      <pre id="logTail" class="log-tail">No log output yet.</pre>
+    </div>
   </div>
   <div id="status" class="status-banner hidden"></div>
   <div id="map"></div>
@@ -328,7 +332,8 @@
       cancelJobBtn: document.getElementById("cancelJobBtn"),
       parcelSummary: document.getElementById("parcelSummary"),
       placementSummary: document.getElementById("placementSummary"),
-      shadowSummary: document.getElementById("shadowSummary")
+      shadowSummary: document.getElementById("shadowSummary"),
+      logTail: document.getElementById("logTail")
     };
 
     const appState = {
@@ -903,6 +908,9 @@
         const status = data?.status || appState.job.status;
         appState.job.status = status;
         updateJobStatus(`Job ${status}...`);
+        if (data?.log_tail) {
+          updateLogTail(data.log_tail);
+        }
         if (isTerminalStatus(status)) {
           finalizeJob(`Job ${status}.`);
         }
@@ -947,6 +955,7 @@
         }
       } catch (err) {
         console.warn("Geo polling error", err);
+        updateLogTail(err.message);
         logMessage("Geo polling error", { error: err.message }, "error");
       }
     }
@@ -1003,6 +1012,7 @@
         updateOverlaySources(overlay);
       } catch (err) {
         console.warn("Artifact polling error", err);
+        updateLogTail(err.message);
         logMessage("Artifact polling error", { error: err.message }, "error");
       }
     }
@@ -1187,6 +1197,11 @@
       if (ui.shadowSummary) {
         ui.shadowSummary.textContent = `Shadows: ${shadowCount}`;
       }
+    }
+
+    function updateLogTail(text) {
+      if (!ui.logTail) return;
+      ui.logTail.textContent = text || "No log output yet.";
     }
 
     function clearOverlayData() {
@@ -1447,7 +1462,7 @@
       updateJobStatus(message || "Job finished.");
       logMessage("Job finalized", { message });
       appState.job = null;
-      updateLogTail("", LOG_TAIL_DEFAULT);
+      updateLogTail("");
       clearOverlayData();
     }
 
@@ -1471,7 +1486,7 @@
       setControlsDisabled(false);
       ui.cancelJobBtn.disabled = true;
       updateJobSource(EMPTY_GEOJSON);
-      updateLogTail("", LOG_TAIL_DEFAULT);
+      updateLogTail("");
       clearOverlayData();
     }
 

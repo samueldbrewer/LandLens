@@ -279,20 +279,13 @@
       </p>
     </div>
     <div class="panel-section desktop-only">
-      <div class="log-tail-label">Latest worker log tail</div>
-      <pre id="logTail" class="log-tail">No log output yet.</pre>
+      <strong style="color:#0f172a;">Map layers</strong>
+      <div class="panel-status" id="layerStatus">Parcels, placements, and shadows update live as jobs run.</div>
     </div>
-    <div class="panel-section log-section desktop-only">
-      <div class="log-header">
-        <div>
-          <strong style="color:#0f172a;">Run log</strong>
-          <div class="panel-status" style="margin-top:2px;">Latest API payloads & status</div>
-        </div>
-        <button id="clearLogBtn" class="btn-secondary" type="button" style="padding:6px 10px;font-size:0.8rem;">Clear</button>
-      </div>
-      <div id="logFeed" class="log-feed">
-        <div class="log-entry"><strong>Waiting for activity…</strong></div>
-      </div>
+    <div class="panel-section desktop-only" id="layerSummary">
+      <div class="panel-status" id="parcelSummary">Parcels: 0</div>
+      <div class="panel-status" id="placementSummary">Placements: 0</div>
+      <div class="panel-status" id="shadowSummary">Shadows: 0</div>
     </div>
   </div>
   <div id="status" class="status-banner hidden"></div>
@@ -333,9 +326,9 @@
       jobStatusText: document.getElementById("jobStatusText"),
       jobMetaText: document.getElementById("jobMetaText"),
       cancelJobBtn: document.getElementById("cancelJobBtn"),
-      clearLogBtn: document.getElementById("clearLogBtn"),
-      logFeed: document.getElementById("logFeed"),
-      logTail: document.getElementById("logTail")
+      parcelSummary: document.getElementById("parcelSummary"),
+      placementSummary: document.getElementById("placementSummary"),
+      shadowSummary: document.getElementById("shadowSummary")
     };
 
     const appState = {
@@ -345,7 +338,6 @@
       pollTimers: { status: null, geo: null, artifacts: null },
       abortControllers: new Set(),
       jobMarker: null,
-      logs: [],
       overlayCache: {
         data: {},
         index: 0
@@ -357,11 +349,6 @@
         labels: EMPTY_GEOJSON
       }
     };
-    const LOG_LIMIT = 200;
-    const LOG_TAIL_DEFAULT = "No log output yet.";
-    const LOG_TAIL_UNAVAILABLE = "Log tail unavailable. Use /jobs/{id}/logs.";
-    const LOG_TAIL_MAX_LINES = 200;
-    const LOG_TAIL_USELESS_PATTERNS = [/not found/i, /no log/i, /tail unavailable/i];
 
     function setStatus(message, type = "info") {
       if (!message) {
@@ -405,82 +392,6 @@
       return `log-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     }
 
-    function addLogEntry(message, payload, level = "info") {
-      const skipLargePayload =
-        payload &&
-        payload.footprint_points &&
-        Array.isArray(payload.footprint_points) &&
-        payload.footprint_points.length > 6;
-      const truncatedPayload = skipLargePayload
-        ? {
-            ...payload,
-            footprint_points: `(${payload.footprint_points.length} points hidden)`
-          }
-        : payload;
-      const entry = {
-        id: generateLogId(),
-        timestamp: new Date(),
-        message,
-        payload: truncatedPayload,
-        level
-      };
-      appState.logs.unshift(entry);
-      if (appState.logs.length > LOG_LIMIT) {
-        appState.logs.pop();
-      }
-      renderLog();
-    }
-
-    function formatPayload(payload) {
-      if (payload === undefined) return "";
-      try {
-        return JSON.stringify(payload, null, 2);
-      } catch (err) {
-        return String(payload);
-      }
-    }
-
-    function renderLog() {
-      if (!ui.logFeed) return;
-      if (!appState.logs.length) {
-        ui.logFeed.innerHTML = '<div class="log-entry"><strong>No entries yet.</strong></div>';
-        return;
-      }
-      ui.logFeed.innerHTML = appState.logs
-        .map((entry) => {
-          const time = entry.timestamp.toLocaleTimeString();
-          const payloadText = formatPayload(entry.payload);
-          return `
-            <div class="log-entry">
-              <strong>[${time}] ${entry.message}</strong>
-              ${payloadText ? `<pre>${payloadText}</pre>` : ""}
-            </div>
-          `;
-        })
-        .join("");
-    }
-
-    function clearLog() {
-      appState.logs = [];
-      renderLog();
-    }
-
-    function normalizeLogTail(tail) {
-      if (!tail) return "";
-      if (Array.isArray(tail)) return tail.join("\n");
-      if (typeof tail === "object") {
-        return Object.entries(tail)
-          .map(([key, value]) => `${key}: ${value}`)
-          .join("\n");
-      }
-      return String(tail);
-    }
-
-    function updateLogTail(tailText, fallback = LOG_TAIL_DEFAULT) {
-      if (!ui.logTail) return;
-      const text = tailText && tailText.trim().length ? tailText : fallback;
-      ui.logTail.textContent = text;
-    }
 
     window.addEventListener("error", (event) => {
       if (!event?.message) return;
@@ -977,31 +888,19 @@
       return ["done", "complete", "completed", "finished", "failed", "error", "cancelled", "canceled"].includes(normalized);
     }
 
-    const MAX_LOG_TAIL_CHARS = 1600;
-
     async function fetchJobStatus() {
       if (!appState.job) return;
-      addLogEntry("GET /jobs/{id}", { id: appState.job.id });
       try {
         const data = await fetchJSON(`/jobs/${encodeURIComponent(appState.job.id)}`);
         const status = data?.status || appState.job.status;
         appState.job.status = status;
         updateJobStatus(`Job ${status}...`);
-        if (data?.log_tail) {
-          const formattedTail = normalizeLogTail(data.log_tail).slice(-MAX_LOG_TAIL_CHARS);
-          updateLogTail(formattedTail);
-        } else {
-          const fallbackTail = await fetchJobLogs(appState.job.id);
-          updateLogTail(fallbackTail, LOG_TAIL_UNAVAILABLE);
-        }
-        addLogEntry("Job status response", data);
         if (isTerminalStatus(status)) {
           finalizeJob(`Job ${status}.`);
         }
       } catch (err) {
         console.error(err);
         updateJobStatus(`Job status error: ${err.message}`, "error");
-        addLogEntry("Job status error", { error: err.message }, "error");
       }
     }
 
@@ -1268,6 +1167,18 @@
       if (map.getSource(PLACEMENT_LABEL_SOURCE_ID)) {
         map.getSource(PLACEMENT_LABEL_SOURCE_ID).setData(data.labels || EMPTY_GEOJSON);
       }
+      const parcelCount = data.parcels?.features?.length || 0;
+      const placementCount = data.placements?.features?.length || 0;
+      const shadowCount = data.shadows?.features?.length || 0;
+      if (ui.parcelSummary) {
+        ui.parcelSummary.textContent = `Parcels: ${parcelCount}`;
+      }
+      if (ui.placementSummary) {
+        ui.placementSummary.textContent = `Placements: ${placementCount}`;
+      }
+      if (ui.shadowSummary) {
+        ui.shadowSummary.textContent = `Shadows: ${shadowCount}`;
+      }
     }
 
     function clearOverlayData() {
@@ -1519,23 +1430,6 @@
       return { ...collection, features };
     }
 
-    async function fetchJobLogs(jobId) {
-      if (!jobId) return null;
-      const query = `/jobs/${encodeURIComponent(jobId)}/logs?lines=${LOG_TAIL_MAX_LINES}`;
-      addLogEntry("GET /jobs/{id}/logs", { id: jobId, lines: LOG_TAIL_MAX_LINES });
-      try {
-        const text = await fetchText(query);
-        if (!text || LOG_TAIL_USELESS_PATTERNS.some((pattern) => pattern.test(text))) {
-          return null;
-        }
-        return text;
-      } catch (err) {
-        console.warn("Log tail fetch error", err);
-        addLogEntry("Log tail fetch error", { error: err.message }, "error");
-        return null;
-      }
-    }
-
     function finalizeJob(message) {
       clearJobPolling();
       abortOngoingApiCalls();
@@ -1559,7 +1453,6 @@
       const jobId = appState.job.id;
       updateJobStatus(reason || "Job cancelled.", "error");
       updateJobMeta("");
-      addLogEntry("Job cancelled", { reason, notify });
       if (notify && jobId) {
         sendCancellationSignal(jobId, reason);
       }
@@ -1578,7 +1471,6 @@
       if (!jobId) return;
       const url = `${API_BASE}/jobs/${encodeURIComponent(jobId)}/cancel`;
       const payload = JSON.stringify({ reason: reason || "client_left" });
-      addLogEntry("POST /jobs/{id}/cancel", { jobId, reason });
       if (navigator.sendBeacon) {
         const blob = new Blob([payload], { type: "application/json" });
         navigator.sendBeacon(url, blob);

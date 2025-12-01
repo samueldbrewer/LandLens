@@ -1347,22 +1347,33 @@
         appState.overlayCache.index = 0;
       }
 
+      function normalizePolygonGeometry(input) {
+        if (!input) return null;
+        if (input.type && input.coordinates) {
+          return convertGeometryToLngLat(input);
+        }
+        const converted = convertCoordsIfNeeded(input);
+        if (!Array.isArray(converted)) return null;
+        const coordinates =
+          converted[0] && Array.isArray(converted[0][0])
+            ? converted
+            : [converted];
+        return { type: "Polygon", coordinates };
+      }
+
       function createParcelFeature(data) {
         if (!data?.parcel) return null;
-        let coords =
-          data.parcel.geometry ||
-          data.parcel.polygon ||
-          data.parcel.coordinates;
-        if (!coords) {
+        let geometry =
+          normalizePolygonGeometry(
+            data.parcel.geometry ||
+              data.parcel.polygon ||
+              data.parcel.coordinates,
+          ) || null;
+        if (!geometry) {
           const boundsPolygon = boundsToPolygon(data.parcel._bounds);
-          coords = boundsPolygon ? [boundsPolygon] : null;
+          geometry = normalizePolygonGeometry(boundsPolygon);
         }
-        if (!coords) return null;
-        const converted = convertCoordsIfNeeded(coords);
-        const geometry =
-          converted[0] && Array.isArray(converted[0][0])
-            ? { type: "Polygon", coordinates: converted }
-            : { type: "Polygon", coordinates: [converted] };
+        if (!geometry) return null;
         return {
           type: "Feature",
           geometry,
@@ -1377,18 +1388,15 @@
       }
 
       function createPlacementFeature(placement, parcelId, isBest) {
-        const coords =
-          placement.footprint_geojson?.coordinates ||
-          placement.footprint_points ||
-          placement.footprint ||
-          placement.polygon ||
-          placement.coordinates;
-        if (!coords) return null;
-        const converted = convertCoordsIfNeeded(coords);
         const geometry =
-          converted[0] && Array.isArray(converted[0][0])
-            ? { type: "Polygon", coordinates: converted }
-            : { type: "Polygon", coordinates: [converted] };
+          normalizePolygonGeometry(placement.footprint_geojson) ||
+          normalizePolygonGeometry(
+            placement.footprint_points ||
+              placement.footprint ||
+              placement.polygon ||
+              placement.coordinates,
+          );
+        if (!geometry) return null;
         const composite =
           placement.composite_score ??
           placement.composite ??
@@ -1409,17 +1417,14 @@
       }
 
       function createShadowFeature(placement, parcelId, isBest) {
-        const coords =
-          placement.shadow_geojson?.coordinates ||
-          placement.shadow ||
-          placement.shadow_polygon ||
-          placement.shadow_outline;
-        if (!coords) return null;
-        const converted = convertCoordsIfNeeded(coords);
         const geometry =
-          converted[0] && Array.isArray(converted[0][0])
-            ? { type: "Polygon", coordinates: converted }
-            : { type: "Polygon", coordinates: [converted] };
+          normalizePolygonGeometry(placement.shadow_geojson) ||
+          normalizePolygonGeometry(
+            placement.shadow ||
+              placement.shadow_polygon ||
+              placement.shadow_outline,
+          );
+        if (!geometry) return null;
         return {
           type: "Feature",
           geometry,

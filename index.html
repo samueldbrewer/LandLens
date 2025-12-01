@@ -644,6 +644,14 @@
       }
     }
 
+    function logMessage(message, payload, level = "info") {
+      const timestamp = new Date().toLocaleTimeString();
+      console[level === "error" ? "error" : "log"](
+        `[${timestamp}] ${message}`,
+        payload || ""
+      );
+    }
+
     async function fetchJSON(path, options = {}) {
       const controller = new AbortController();
       const signal = options.signal || controller.signal;
@@ -712,18 +720,18 @@
 
     async function loadDesigns() {
       setDesignStatus("Loading designs...");
-      addLogEntry("GET /designs", null);
+      logMessage("GET /designs");
       try {
         const payload = await fetchJSON("/designs");
         const designs = Array.isArray(payload) ? payload : payload?.designs || [];
         appState.designs = designs;
         populateDesignSelect();
         setDesignStatus(`Loaded ${designs.length} design${designs.length === 1 ? "" : "s"}.`);
-        addLogEntry("Designs loaded", designs);
+        logMessage("Designs loaded", { count: designs.length });
       } catch (err) {
         console.error(err);
         setDesignStatus(`Failed to load designs: ${err.message}`, "error");
-        addLogEntry("Design load failed", { error: err.message }, "error");
+        logMessage("Design load failed", { error: err.message }, "error");
       }
     }
 
@@ -809,7 +817,7 @@
       if (Array.isArray(design.front_direction)) {
         payload.front_direction = design.front_direction;
       }
-      addLogEntry("POST /jobs payload", payload);
+      logMessage("POST /jobs payload", { design: design.name, lat: lngLat.lat, lon: lngLat.lng });
       try {
         const data = await fetchJSON("/jobs", {
           method: "POST",
@@ -822,7 +830,7 @@
           lngLat,
           designName: design.name || design.slug || "Design"
         };
-        addLogEntry("Job submitted", data);
+        logMessage("Job submitted", data);
         placeJobMarker(lngLat);
         updateJobStatus(`Job ${appState.job.id || ""} queued...`);
         updateJobMeta("Waiting for first parcels...");
@@ -830,7 +838,7 @@
       } catch (err) {
         console.error(err);
         updateJobStatus(`Failed to start job: ${err.message}`, "error");
-        addLogEntry("Job start failed", { error: err.message }, "error");
+        logMessage("Job start failed", { error: err.message }, "error");
         setControlsDisabled(false);
       }
     }
@@ -906,7 +914,7 @@
 
     async function fetchJobGeo() {
       if (!appState.job) return;
-      addLogEntry("GET /jobs/{id}/geo", { id: appState.job.id });
+      logMessage("GET /jobs/{id}/geo", { id: appState.job.id });
       try {
         const data = await fetchJSON(`/jobs/${encodeURIComponent(appState.job.id)}/geo`);
         const normalized = normalizeGeoResponse(data);
@@ -924,7 +932,7 @@
           } else {
             updateJobMeta(`Parcels returned: ${featureCount}`);
           }
-          addLogEntry("Geo update", { featureCount, progress, raw: collection });
+          logMessage("Geo update", { featureCount, progress });
         } else {
           const progress = extractProgress(data);
           if (progress) {
@@ -939,13 +947,13 @@
         }
       } catch (err) {
         console.warn("Geo polling error", err);
-        addLogEntry("Geo polling error", { error: err.message }, "error");
+        logMessage("Geo polling error", { error: err.message }, "error");
       }
     }
 
     async function fetchJobArtifacts() {
       if (!appState.job) return;
-      addLogEntry("GET /jobs/{id}/artifacts", { id: appState.job.id });
+      logMessage("GET /jobs/{id}/artifacts", { id: appState.job.id });
       try {
         const manifest = await fetchJSON(`/jobs/${encodeURIComponent(appState.job.id)}/artifacts`);
         const parcels = manifest?.artifacts?.parcels || [];
@@ -984,7 +992,7 @@
                 cache.data[url] = data;
               }
             } catch (err) {
-              addLogEntry("Placement fetch error", { url, error: err.message }, "error");
+              logMessage("Placement fetch error", { url, error: err.message }, "error");
             }
           })
         );
@@ -995,7 +1003,7 @@
         updateOverlaySources(overlay);
       } catch (err) {
         console.warn("Artifact polling error", err);
-        addLogEntry("Artifact polling error", { error: err.message }, "error");
+        logMessage("Artifact polling error", { error: err.message }, "error");
       }
     }
     function normalizeGeoResponse(payload) {
@@ -1437,7 +1445,7 @@
       setControlsDisabled(false);
       ui.cancelJobBtn.disabled = true;
       updateJobStatus(message || "Job finished.");
-      addLogEntry("Job finalized", { message });
+      logMessage("Job finalized", { message });
       appState.job = null;
       updateLogTail("", LOG_TAIL_DEFAULT);
       clearOverlayData();

@@ -1155,7 +1155,7 @@ Select a design to preview shrink-wrap metadata.</pre
         if (!jobId) return;
         const controller = new AbortController();
         appState.eventStreamController = controller;
-        const url = `${API_BASE}/jobs/${encodeURIComponent(jobId)}/files/events.ndjson`;
+        const url = `${API_BASE}/jobs/${encodeURIComponent(jobId)}/files/outputs/events.ndjson`;
 
         async function consumeStream() {
           try {

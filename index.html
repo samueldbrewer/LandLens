@@ -1048,6 +1048,7 @@ Select a design to preview shrink-wrap metadata.</pre
           design: design.name,
           lat: lngLat.lat,
           lon: lngLat.lng,
+          config: payload.config,
         });
         try {
           const data = await fetchJSON("/jobs", {

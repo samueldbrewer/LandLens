@@ -346,6 +346,7 @@ Select a design to preview shrink-wrap metadata.</pre
       const JOB_STATUS_POLL_MS = 5000;
       const JOB_GEO_POLL_MS = 4000;
       const JOB_ARTIFACT_POLL_MS = 8000;
+      const EVENT_POLL_INTERVAL_MS = 1500;
       const EMPTY_GEOJSON = { type: "FeatureCollection", features: [] };
 
       maplibregl.workerUrl = "./maplibre-gl-csp-worker.js";
@@ -389,8 +390,12 @@ Select a design to preview shrink-wrap metadata.</pre
           labels: EMPTY_GEOJSON,
         },
         designPreviews: {},
-        eventStreamController: null,
-        eventStreamRetryTimeout: null,
+        eventStreamState: {
+          jobId: null,
+          timer: null,
+          cursor: 0,
+          buffer: "",
+        },
         overlayRefreshPending: false,
         overlayStore: {
           parcels: new Map(),
@@ -1140,60 +1145,66 @@ Select a design to preview shrink-wrap metadata.</pre
       }
 
       function stopEventStream() {
-        if (appState.eventStreamController) {
-          appState.eventStreamController.abort();
-          appState.eventStreamController = null;
+        const state = appState.eventStreamState;
+        if (state?.timer) {
+          clearInterval(state.timer);
         }
-        if (appState.eventStreamRetryTimeout) {
-          clearTimeout(appState.eventStreamRetryTimeout);
-          appState.eventStreamRetryTimeout = null;
-        }
+        appState.eventStreamState = {
+          jobId: null,
+          timer: null,
+          cursor: 0,
+          buffer: "",
+        };
       }
 
       function startEventStream(jobId) {
         stopEventStream();
         if (!jobId) return;
-        const controller = new AbortController();
-        appState.eventStreamController = controller;
-        const url = `${API_BASE}/jobs/${encodeURIComponent(jobId)}/files/outputs/events.ndjson`;
+        const state = {
+          jobId,
+          timer: null,
+          cursor: 0,
+          buffer: "",
+        };
+        appState.eventStreamState = state;
+        pollEventFile(jobId);
+        state.timer = setInterval(() => pollEventFile(jobId), EVENT_POLL_INTERVAL_MS);
+      }
 
-        async function consumeStream() {
+      function getEventStreamUrls(jobId) {
+        const encoded = encodeURIComponent(jobId);
+        return [
+          `${API_BASE}/jobs/${encoded}/files/outputs/events.ndjson`,
+          `${API_BASE}/jobs/${encoded}/files/events.ndjson`,
+        ];
+      }
+
+      async function pollEventFile(jobId) {
+        const state = appState.eventStreamState;
+        if (!state || state.jobId !== jobId) return;
+        const urls = getEventStreamUrls(jobId);
+        let text = null;
+        for (const url of urls) {
           try {
-            const response = await fetch(url, { signal: controller.signal });
-            if (!response.ok || !response.body) {
-              throw new Error(`Stream failed (${response.status || "no body"})`);
+            const response = await fetch(url, { cache: "no-store" });
+            if (!response.ok) {
+              continue;
             }
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = "";
-            while (true) {
-              const { value, done } = await reader.read();
-              if (done) break;
-              buffer += decoder.decode(value, { stream: true });
-              let newlineIndex = buffer.indexOf("\n");
-              while (newlineIndex !== -1) {
-                const line = buffer.slice(0, newlineIndex);
-                if (line.trim()) handleCrawlerEvent(line);
-                buffer = buffer.slice(newlineIndex + 1);
-                newlineIndex = buffer.indexOf("\n");
-              }
-            }
-            buffer += decoder.decode();
-            if (buffer.trim()) {
-              handleCrawlerEvent(buffer);
-            }
+            text = await response.text();
+            break;
           } catch (err) {
-            if (controller.signal.aborted) return;
-            logMessage("Event stream error", { error: err.message }, "error");
-            appState.eventStreamRetryTimeout = setTimeout(() => {
-              if (appState.job?.id === jobId) {
-                startEventStream(jobId);
-              }
-            }, 2000);
+            logMessage("Event poll fetch error", { error: err.message }, "error");
           }
         }
-
-        consumeStream();
+        if (text == null) return;
+        if (!text.length) return;
+        const newText = text.slice(state.cursor);
+        state.cursor = text.length;
+        if (!newText) return;
+        const combined = (state.buffer || "") + newText;
+        const lines = combined.split("\n");
+        state.buffer = lines.pop() || "";
+        lines.forEach(handleCrawlerEvent);
       }
 
       function handleCrawlerEvent(line) {

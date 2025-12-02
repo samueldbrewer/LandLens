@@ -1747,26 +1747,24 @@ Select a design to preview shrink-wrap metadata.</pre
         return { ...collection, features };
       }
 
-      function finalizeJob(message) {
-        clearJobPolling();
-        abortOngoingApiCalls();
-        clearJobMarker();
-        setControlsDisabled(false);
-        ui.cancelJobBtn.disabled = true;
-        updateJobStatus(message || "Job finished.");
-        logMessage("Job finalized", { message });
-        appState.job = null;
-        updateLogTail("");
-        clearOverlayData();
-      }
+    function finalizeJob(message) {
+      clearJobPolling();
+      clearJobMarker();
+      setControlsDisabled(false);
+      ui.cancelJobBtn.disabled = true;
+      updateJobStatus(message || "Job finished.");
+      logMessage("Job finalized", { message });
+      appState.job = null;
+      fetchJobArtifacts();
+    }
 
       function abortOngoingApiCalls() {
         appState.abortControllers.forEach((controller) => controller.abort());
         appState.abortControllers.clear();
       }
 
-      function cancelActiveJob(reason, notify = false) {
-        if (!appState.job) return;
+    function cancelActiveJob(reason, notify = false) {
+      if (!appState.job) return;
         const jobId = appState.job.id;
         updateJobStatus(reason || "Job cancelled.", "error");
         updateJobMeta("");
@@ -1776,13 +1774,13 @@ Select a design to preview shrink-wrap metadata.</pre
         clearJobPolling();
         abortOngoingApiCalls();
         clearJobMarker();
-        appState.job = null;
-        setControlsDisabled(false);
-        ui.cancelJobBtn.disabled = true;
-        updateJobSource(EMPTY_GEOJSON);
-        updateLogTail("");
-        clearOverlayData();
-      }
+      appState.job = null;
+      setControlsDisabled(false);
+      ui.cancelJobBtn.disabled = true;
+      updateJobSource(EMPTY_GEOJSON);
+      updateLogTail("");
+      clearOverlayData();
+    }
 
       function sendCancellationSignal(jobId, reason) {
         if (!jobId) return;

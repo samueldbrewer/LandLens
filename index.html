@@ -1188,17 +1188,28 @@ Select a design to preview shrink-wrap metadata.</pre
           try {
             const response = await fetch(url, { cache: "no-store" });
             if (!response.ok) {
-              continue;
+              if (response.status === 404) {
+                continue;
+              }
+              throw new Error(`Event poll failed (${response.status})`);
             }
             text = await response.text();
             break;
           } catch (err) {
             logMessage("Event poll fetch error", { error: err.message }, "error");
+            return;
           }
         }
         if (text == null) return;
         if (!text.length) return;
-        const newText = text.slice(state.cursor);
+        let newText;
+        if (state.cursor === 0) {
+          newText = text;
+        } else if (text.length > state.cursor) {
+          newText = text.slice(state.cursor);
+        } else {
+          return;
+        }
         state.cursor = text.length;
         if (!newText) return;
         const combined = (state.buffer || "") + newText;

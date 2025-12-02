@@ -392,6 +392,8 @@ Select a design to preview shrink-wrap metadata.</pre
           labels: EMPTY_GEOJSON,
         },
         designPreviews: {},
+        eventStreamController: null,
+        overlayRefreshPending: false,
       };
 
       function getDesignFilename(design) {
@@ -1070,6 +1072,7 @@ Select a design to preview shrink-wrap metadata.</pre
           updateJobStatus(`Job ${appState.job.id || ""} queued...`);
           updateJobMeta("Waiting for first parcels...");
           scheduleJobPolling();
+          startEventStream(appState.job.id);
         } catch (err) {
           console.error(err);
           updateJobStatus(`Failed to start job: ${err.message}`, "error");
@@ -1127,6 +1130,64 @@ Select a design to preview shrink-wrap metadata.</pre
         if (appState.pollTimers.artifacts) {
           clearInterval(appState.pollTimers.artifacts);
           appState.pollTimers.artifacts = null;
+        }
+      }
+
+      function stopEventStream() {
+        if (appState.eventStreamController) {
+          appState.eventStreamController.abort();
+          appState.eventStreamController = null;
+        }
+      }
+
+      function startEventStream(jobId) {
+        stopEventStream();
+        if (!jobId) return;
+        const controller = new AbortController();
+        appState.eventStreamController = controller;
+        fetch(
+          `${API_BASE}/jobs/${encodeURIComponent(jobId)}/files/events.ndjson`,
+          { signal: controller.signal },
+        )
+          .then(async (response) => {
+            if (!response.ok || !response.body) return;
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() || "";
+              lines.forEach(handleCrawlerEvent);
+            }
+          })
+          .catch((err) => {
+            if (err.name !== "AbortError") {
+              logMessage("Event stream error", { error: err.message }, "error");
+            }
+          });
+      }
+
+      function handleCrawlerEvent(line) {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        try {
+          const event = JSON.parse(trimmed);
+          logMessage("Crawler event", event);
+          if (event.message) {
+            updateLogTail(event.message);
+          } else if (event.type) {
+            updateLogTail(event.type);
+          }
+          requestOverlayRefresh(200);
+        } catch (err) {
+          logMessage(
+            "Event parse error",
+            { line: trimmed, error: err.message },
+            "error",
+          );
         }
       }
 
@@ -1223,8 +1284,8 @@ Select a design to preview shrink-wrap metadata.</pre
             clearOverlayData();
             return;
           }
-        const urls = parcels
-          .map((entry) => normalizeArtifactUrl(entry?.placements_json_url))
+          const urls = parcels
+            .map((entry) => normalizeArtifactUrl(entry?.placements_json_url))
             .filter(Boolean);
           if (!urls.length) {
             clearOverlayData();
@@ -1237,7 +1298,7 @@ Select a design to preview shrink-wrap metadata.</pre
               delete cache.data[url];
             }
           });
-        const fetchLimit = Math.min(5, urls.length);
+          const fetchLimit = Math.min(5, urls.length);
           if (cache.index >= urls.length) cache.index = 0;
           const toFetch = [];
           for (let i = 0; i < fetchLimit; i++) {
@@ -1481,6 +1542,15 @@ Select a design to preview shrink-wrap metadata.</pre
         if (ui.shadowSummary) {
           ui.shadowSummary.textContent = `Shadows: ${shadowCount}`;
         }
+      }
+
+      function requestOverlayRefresh(delay = 0) {
+        if (appState.overlayRefreshPending) return;
+        appState.overlayRefreshPending = true;
+        setTimeout(() => {
+          appState.overlayRefreshPending = false;
+          fetchJobArtifacts();
+        }, delay);
       }
 
       function updateLogTail(text) {
@@ -1747,24 +1817,25 @@ Select a design to preview shrink-wrap metadata.</pre
         return { ...collection, features };
       }
 
-    function finalizeJob(message) {
-      clearJobPolling();
-      clearJobMarker();
-      setControlsDisabled(false);
-      ui.cancelJobBtn.disabled = true;
-      updateJobStatus(message || "Job finished.");
-      logMessage("Job finalized", { message });
-      appState.job = null;
-      fetchJobArtifacts();
-    }
+      function finalizeJob(message) {
+        clearJobPolling();
+        clearJobMarker();
+        stopEventStream();
+        setControlsDisabled(false);
+        ui.cancelJobBtn.disabled = true;
+        updateJobStatus(message || "Job finished.");
+        logMessage("Job finalized", { message });
+        appState.job = null;
+        fetchJobArtifacts();
+      }
 
       function abortOngoingApiCalls() {
         appState.abortControllers.forEach((controller) => controller.abort());
         appState.abortControllers.clear();
       }
 
-    function cancelActiveJob(reason, notify = false) {
-      if (!appState.job) return;
+      function cancelActiveJob(reason, notify = false) {
+        if (!appState.job) return;
         const jobId = appState.job.id;
         updateJobStatus(reason || "Job cancelled.", "error");
         updateJobMeta("");
@@ -1774,13 +1845,14 @@ Select a design to preview shrink-wrap metadata.</pre
         clearJobPolling();
         abortOngoingApiCalls();
         clearJobMarker();
-      appState.job = null;
-      setControlsDisabled(false);
-      ui.cancelJobBtn.disabled = true;
-      updateJobSource(EMPTY_GEOJSON);
-      updateLogTail("");
-      clearOverlayData();
-    }
+        appState.job = null;
+        setControlsDisabled(false);
+        ui.cancelJobBtn.disabled = true;
+        updateJobSource(EMPTY_GEOJSON);
+        updateLogTail("");
+        clearOverlayData();
+        stopEventStream();
+      }
 
       function sendCancellationSignal(jobId, reason) {
         if (!jobId) return;

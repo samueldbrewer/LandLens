@@ -421,6 +421,9 @@ Select a design to preview shrink-wrap metadata.</pre
               "https://landlens.up.railway.app",
             );
           }
+          if (url.startsWith("http://")) {
+            return url.replace("http://", "https://");
+          }
           return url;
         } catch (err) {
           return url;
@@ -1234,7 +1237,7 @@ Select a design to preview shrink-wrap metadata.</pre
               delete cache.data[url];
             }
           });
-          const fetchLimit = Math.min(3, urls.length);
+        const fetchLimit = Math.min(5, urls.length);
           if (cache.index >= urls.length) cache.index = 0;
           const toFetch = [];
           for (let i = 0; i < fetchLimit; i++) {

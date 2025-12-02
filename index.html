@@ -314,10 +314,6 @@ Select a design to preview shrink-wrap metadata.</pre
             Cancel active job
           </button>
         </div>
-        <p class="panel-status" style="margin: 4px 0 0">
-          Cancelling uses <code>/jobs/{id}/cancel</code> per the service guide;
-          check the log tail to confirm the worker has stopped.
-        </p>
       </div>
       <div class="panel-section desktop-only" id="layerSummary">
         <div class="panel-status" id="parcelSummary">Parcels: 0</div>
@@ -384,6 +380,7 @@ Select a design to preview shrink-wrap metadata.</pre
         overlayCache: {
           data: {},
           index: 0,
+          jobId: null,
         },
         overlayData: {
           parcels: EMPTY_GEOJSON,
@@ -393,8 +390,15 @@ Select a design to preview shrink-wrap metadata.</pre
         },
         designPreviews: {},
         eventStreamController: null,
+        eventStreamRetryTimeout: null,
         overlayRefreshPending: false,
-        bestPlacements: [],
+        overlayStore: {
+          parcels: new Map(),
+          placements: new Map(),
+          shadows: new Map(),
+          labels: new Map(),
+          best: new Map(),
+        },
       };
 
       function getDesignFilename(design) {
@@ -1139,6 +1143,10 @@ Select a design to preview shrink-wrap metadata.</pre
           appState.eventStreamController.abort();
           appState.eventStreamController = null;
         }
+        if (appState.eventStreamRetryTimeout) {
+          clearTimeout(appState.eventStreamRetryTimeout);
+          appState.eventStreamRetryTimeout = null;
+        }
       }
 
       function startEventStream(jobId) {
@@ -1146,12 +1154,14 @@ Select a design to preview shrink-wrap metadata.</pre
         if (!jobId) return;
         const controller = new AbortController();
         appState.eventStreamController = controller;
-        fetch(
-          `${API_BASE}/jobs/${encodeURIComponent(jobId)}/files/events.ndjson`,
-          { signal: controller.signal },
-        )
-          .then(async (response) => {
-            if (!response.ok || !response.body) return;
+        const url = `${API_BASE}/jobs/${encodeURIComponent(jobId)}/files/events.ndjson`;
+
+        async function consumeStream() {
+          try {
+            const response = await fetch(url, { signal: controller.signal });
+            if (!response.ok || !response.body) {
+              throw new Error(`Stream failed (${response.status || "no body"})`);
+            }
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = "";
@@ -1159,16 +1169,30 @@ Select a design to preview shrink-wrap metadata.</pre
               const { value, done } = await reader.read();
               if (done) break;
               buffer += decoder.decode(value, { stream: true });
-              const lines = buffer.split("\n");
-              buffer = lines.pop() || "";
-              lines.forEach(handleCrawlerEvent);
+              let newlineIndex = buffer.indexOf("\n");
+              while (newlineIndex !== -1) {
+                const line = buffer.slice(0, newlineIndex);
+                if (line.trim()) handleCrawlerEvent(line);
+                buffer = buffer.slice(newlineIndex + 1);
+                newlineIndex = buffer.indexOf("\n");
+              }
             }
-          })
-          .catch((err) => {
-            if (err.name !== "AbortError") {
-              logMessage("Event stream error", { error: err.message }, "error");
+            buffer += decoder.decode();
+            if (buffer.trim()) {
+              handleCrawlerEvent(buffer);
             }
-          });
+          } catch (err) {
+            if (controller.signal.aborted) return;
+            logMessage("Event stream error", { error: err.message }, "error");
+            appState.eventStreamRetryTimeout = setTimeout(() => {
+              if (appState.job?.id === jobId) {
+                startEventStream(jobId);
+              }
+            }, 2000);
+          }
+        }
+
+        consumeStream();
       }
 
       function handleCrawlerEvent(line) {
@@ -1182,12 +1206,80 @@ Select a design to preview shrink-wrap metadata.</pre
           } else if (event.type) {
             updateLogTail(event.type);
           }
-          requestOverlayRefresh(200);
+          switch (event.type) {
+            case "parcel_started":
+              handleParcelStartedEvent(event);
+              break;
+            case "placement_scored":
+              handlePlacementScoredEvent(event);
+              break;
+            case "best_updated":
+              handleBestUpdatedEvent(event);
+              break;
+            case "parcel_completed":
+            case "parcel_failed":
+              requestOverlayRefresh(1000);
+              break;
+            default:
+              break;
+          }
         } catch (err) {
           logMessage(
             "Event parse error",
             { line: trimmed, error: err.message },
             "error",
+          );
+        }
+      }
+
+      function handleParcelStartedEvent(event) {
+        const parcelData = event.parcel || {
+          LOWPARCELID: event.parcel_id,
+          geometry: event.geometry,
+        };
+        if (!parcelData) return;
+        const feature = createParcelFeature({ parcel: parcelData });
+        if (!feature) return;
+        const parcelId = event.parcel_id || feature.properties?.parcelId;
+        upsertParcelFeature(feature, parcelId);
+      }
+
+      function handlePlacementScoredEvent(event) {
+        const placement = event.placement || event.data || event;
+        if (!placement) return;
+        const parcelId =
+          event.parcel_id || placement.parcel_id || placement.parcelId;
+        const feature = createPlacementFeature(placement, parcelId, false);
+        if (feature) {
+          const key =
+            placement.id ||
+            placement.placement_id ||
+            `${parcelId || "parcel"}-${placement.sequence || Date.now()}`;
+          upsertPlacementFeature(feature, key);
+        }
+        const shadowFeature = createShadowFeature(placement, parcelId, false);
+        if (shadowFeature) {
+          const shadowKey =
+            placement.id ||
+            `${parcelId || "parcel"}-${placement.sequence || Date.now()}-shadow`;
+          upsertShadowFeature(shadowFeature, shadowKey);
+        }
+      }
+
+      function handleBestUpdatedEvent(event) {
+        const placement = event.placement || event.best || event;
+        if (!placement) return;
+        const parcelId =
+          event.parcel_id || placement.parcel_id || placement.parcelId;
+        const feature = createPlacementFeature(placement, parcelId, true);
+        if (feature) {
+          upsertBestFeature(feature, parcelId);
+        }
+        const shadowFeature = createShadowFeature(placement, parcelId, true);
+        if (shadowFeature) {
+          upsertShadowFeature(
+            shadowFeature,
+            `${parcelId || "parcel"}-best-shadow`,
           );
         }
       }
@@ -1273,41 +1365,35 @@ Select a design to preview shrink-wrap metadata.</pre
         }
       }
 
-      async function fetchJobArtifacts() {
-        if (!appState.job) return;
-        logMessage("GET /jobs/{id}/artifacts", { id: appState.job.id });
+      async function fetchJobArtifacts(jobIdOverride) {
+        const jobId = jobIdOverride || appState.job?.id;
+        if (!jobId) return;
+        logMessage("GET /jobs/{id}/artifacts", { id: jobId });
         try {
           const manifest = await fetchJSON(
-            `/jobs/${encodeURIComponent(appState.job.id)}/artifacts`,
+            `/jobs/${encodeURIComponent(jobId)}/artifacts`,
           );
           const parcels = manifest?.artifacts?.parcels || [];
           if (!parcels.length) {
-            clearOverlayData();
             return;
           }
           const urls = parcels
             .map((entry) => normalizeArtifactUrl(entry?.placements_json_url))
             .filter(Boolean);
-          if (!urls.length) {
-            clearOverlayData();
-            return;
-          }
+          if (!urls.length) return;
           // Remove cache entries for parcels no longer referenced
           const cache = appState.overlayCache;
+          if (cache.jobId && cache.jobId !== jobId) {
+            cache.data = {};
+            cache.index = 0;
+          }
+          cache.jobId = jobId;
           Object.keys(cache.data).forEach((url) => {
             if (!urls.includes(url)) {
               delete cache.data[url];
             }
           });
-          const fetchLimit = Math.min(5, urls.length);
-          if (cache.index >= urls.length) cache.index = 0;
-          const toFetch = [];
-          for (let i = 0; i < fetchLimit; i++) {
-            const idx = (cache.index + i) % urls.length;
-            toFetch.push(urls[idx]);
-          }
-          cache.index = (cache.index + fetchLimit) % urls.length;
-
+          const toFetch = urls;
           await Promise.all(
             toFetch.map(async (url) => {
               try {
@@ -1330,8 +1416,13 @@ Select a design to preview shrink-wrap metadata.</pre
           const overlay = buildOverlayFromPlacements(
             Object.values(cache.data).filter(Boolean),
           );
-          updateOverlaySources(overlay);
+          setOverlayStoreFromCollections(overlay);
         } catch (err) {
+          const message = err?.message || "";
+          if (message.includes("Artifacts not available yet")) {
+            logMessage("Artifact polling pending", { detail: message });
+            return;
+          }
           console.warn("Artifact polling error", err);
           updateLogTail(err.message);
           logMessage("Artifact polling error", { error: err.message }, "error");
@@ -1554,20 +1645,137 @@ Select a design to preview shrink-wrap metadata.</pre
         }, delay);
       }
 
+      function clearOverlayStore() {
+        const store = appState.overlayStore;
+        store.parcels.clear();
+        store.placements.clear();
+        store.shadows.clear();
+        store.labels.clear();
+        store.best.clear();
+      }
+
+      function renderOverlayFromStore() {
+        const store = appState.overlayStore;
+        const parcels = Array.from(store.parcels.values());
+        const placements = Array.from(store.placements.values());
+        const best = Array.from(store.best.values());
+        const shadows = Array.from(store.shadows.values());
+        const labels = Array.from(store.labels.values());
+        updateOverlaySources({
+          parcels: {
+            type: "FeatureCollection",
+            features: parcels,
+          },
+          placements: {
+            type: "FeatureCollection",
+            features: placements.concat(best),
+          },
+          shadows: {
+            type: "FeatureCollection",
+            features: shadows,
+          },
+          labels: {
+            type: "FeatureCollection",
+            features: labels,
+          },
+        });
+      }
+
+      function setOverlayStoreFromCollections(collections) {
+        const store = appState.overlayStore;
+        clearOverlayStore();
+        (collections.parcels?.features || []).forEach((feature, index) => {
+          const key =
+            feature.properties?.parcelId ||
+            feature.properties?.id ||
+            `parcel-${index}`;
+          store.parcels.set(key, feature);
+        });
+        (collections.shadows?.features || []).forEach((feature, index) => {
+          const key =
+            feature.properties?.parcelId ||
+            feature.properties?.id ||
+            `shadow-${index}`;
+          store.shadows.set(key, feature);
+        });
+        (collections.placements?.features || []).forEach((feature, index) => {
+          const key =
+            feature.properties?.placementKey ||
+            feature.properties?.id ||
+            `placement-${index}`;
+          if (feature.properties?.isBest) {
+            const parcelId =
+              feature.properties?.parcelId || feature.properties?.id || key;
+            store.best.set(parcelId, feature);
+          } else {
+            store.placements.set(key, feature);
+          }
+          const label = createLabelFeature(feature);
+          if (label) {
+            store.labels.set(`${key}-label`, label);
+          }
+        });
+        renderOverlayFromStore();
+      }
+
+      function upsertParcelFeature(feature, parcelId) {
+        if (!feature) return;
+        const key =
+          parcelId ||
+          feature.properties?.parcelId ||
+          feature.properties?.id ||
+          `parcel-${Date.now()}`;
+        appState.overlayStore.parcels.set(key, feature);
+        renderOverlayFromStore();
+      }
+
+      function upsertPlacementFeature(feature, key) {
+        if (!feature) return;
+        const placementKey =
+          key ||
+          feature.properties?.placementKey ||
+          `${feature.properties?.parcelId || "parcel"}-${Date.now()}`;
+        appState.overlayStore.placements.set(placementKey, feature);
+        const label = createLabelFeature(feature);
+        if (label) {
+          appState.overlayStore.labels.set(`${placementKey}-label`, label);
+        }
+        renderOverlayFromStore();
+      }
+
+      function upsertShadowFeature(feature, key) {
+        if (!feature) return;
+        const shadowKey = key || `${feature.properties?.parcelId || "shadow"}-${Date.now()}`;
+        appState.overlayStore.shadows.set(shadowKey, feature);
+        renderOverlayFromStore();
+      }
+
+      function upsertBestFeature(feature, parcelId) {
+        if (!feature) return;
+        const key =
+          parcelId ||
+          feature.properties?.parcelId ||
+          feature.properties?.id ||
+          `best-${Date.now()}`;
+        appState.overlayStore.best.set(key, feature);
+        const label = createLabelFeature(feature);
+        if (label) {
+          appState.overlayStore.labels.set(`${key}-best-label`, label);
+        }
+        renderOverlayFromStore();
+      }
+
       function updateLogTail(text) {
         if (!ui.logTail) return;
         ui.logTail.textContent = text || "No log output yet.";
       }
 
       function clearOverlayData() {
-        updateOverlaySources({
-          parcels: EMPTY_GEOJSON,
-          placements: EMPTY_GEOJSON,
-          shadows: EMPTY_GEOJSON,
-          labels: EMPTY_GEOJSON,
-        });
+        clearOverlayStore();
+        renderOverlayFromStore();
         appState.overlayCache.data = {};
         appState.overlayCache.index = 0;
+        appState.overlayCache.jobId = appState.job?.id || null;
       }
 
       function normalizePolygonGeometry(input) {
@@ -1819,15 +2027,16 @@ Select a design to preview shrink-wrap metadata.</pre
       }
 
       function finalizeJob(message) {
+        const finishedJobId = appState.job?.id;
         clearJobPolling();
         clearJobMarker();
         stopEventStream();
         setControlsDisabled(false);
         ui.cancelJobBtn.disabled = true;
         updateJobStatus(message || "Job finished.");
-        logMessage("Job finalized", { message });
+        logMessage("Job finalized", { message, jobId: finishedJobId });
         appState.job = null;
-        fetchJobArtifacts();
+        fetchJobArtifacts(finishedJobId);
       }
 
       function abortOngoingApiCalls() {
@@ -1937,12 +2146,6 @@ Select a design to preview shrink-wrap metadata.</pre
       ui.cancelJobBtn.addEventListener("click", () =>
         cancelActiveJob("Job cancelled by user.", true),
       );
-
-      document.addEventListener("visibilitychange", () => {
-        if (document.hidden) {
-          cancelActiveJob("Page hidden. Stopping crawl.", true);
-        }
-      });
 
       window.addEventListener("beforeunload", () => {
         cancelActiveJob("Page closing. Cancelling crawl.", true);

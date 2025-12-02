@@ -1200,14 +1200,24 @@ Select a design to preview shrink-wrap metadata.</pre
         const trimmed = line.trim();
         if (!trimmed) return;
         try {
-          const event = JSON.parse(trimmed);
+          const raw = JSON.parse(trimmed);
+          const eventType = raw.type || raw.event || raw.kind;
+          const payload = raw.payload || raw.data || raw;
+          const event = {
+            ...raw,
+            ...payload,
+            type: eventType || raw.type,
+            parcel_id: raw.parcel_id ?? payload.parcel_id,
+            placement: payload.placement || raw.placement,
+            parcel: payload.parcel || raw.parcel,
+          };
           logMessage("Crawler event", event);
           if (event.message) {
             updateLogTail(event.message);
-          } else if (event.type) {
-            updateLogTail(event.type);
+          } else if (eventType) {
+            updateLogTail(eventType);
           }
-          switch (event.type) {
+          switch (eventType) {
             case "parcel_started":
               handleParcelStartedEvent(event);
               break;
@@ -1242,23 +1252,30 @@ Select a design to preview shrink-wrap metadata.</pre
         const feature = createParcelFeature({ parcel: parcelData });
         if (!feature) return;
         const parcelId = event.parcel_id || feature.properties?.parcelId;
+        const parcelKey = parcelId ?? "__unknown__";
+        appState.overlayStore.nextPlacementIndex.set(parcelKey, 0);
         upsertParcelFeature(feature, parcelId);
       }
 
       function handlePlacementScoredEvent(event) {
-        const placement = event.placement || event.data || event;
+        const placement =
+          event.placement || event.payload || event.data || event;
         if (!placement) return;
         const parcelId =
           event.parcel_id || placement.parcel_id || placement.parcelId;
         const feature = createPlacementFeature(placement, parcelId, false);
         if (feature) {
+          const parcelKey = parcelId ?? "__unknown__";
           const nextIndex =
-            appState.overlayStore.nextPlacementIndex.get(parcelId) || 0;
-          appState.overlayStore.nextPlacementIndex.set(parcelId, nextIndex + 1);
+            appState.overlayStore.nextPlacementIndex.get(parcelKey) || 0;
+          appState.overlayStore.nextPlacementIndex.set(
+            parcelKey,
+            nextIndex + 1,
+          );
           const key =
             placement.id ||
             placement.placement_id ||
-            `${parcelId || "parcel"}-${nextIndex}`;
+            `${parcelKey}-${nextIndex}`;
           upsertPlacementFeature(feature, key);
         }
         const shadowFeature = createShadowFeature(placement, parcelId, false);
@@ -1271,7 +1288,8 @@ Select a design to preview shrink-wrap metadata.</pre
       }
 
       function handleBestUpdatedEvent(event) {
-        const placement = event.placement || event.best || event;
+        const placement =
+          event.placement || event.best || event.payload || event;
         if (!placement) return;
         const parcelId =
           event.parcel_id || placement.parcel_id || placement.parcelId;

@@ -398,6 +398,7 @@ Select a design to preview shrink-wrap metadata.</pre
           shadows: new Map(),
           labels: new Map(),
           best: new Map(),
+          nextPlacementIndex: new Map(),
         },
       };
 
@@ -1251,10 +1252,13 @@ Select a design to preview shrink-wrap metadata.</pre
           event.parcel_id || placement.parcel_id || placement.parcelId;
         const feature = createPlacementFeature(placement, parcelId, false);
         if (feature) {
+          const nextIndex =
+            appState.overlayStore.nextPlacementIndex.get(parcelId) || 0;
+          appState.overlayStore.nextPlacementIndex.set(parcelId, nextIndex + 1);
           const key =
             placement.id ||
             placement.placement_id ||
-            `${parcelId || "parcel"}-${placement.sequence || Date.now()}`;
+            `${parcelId || "parcel"}-${nextIndex}`;
           upsertPlacementFeature(feature, key);
         }
         const shadowFeature = createShadowFeature(placement, parcelId, false);
@@ -1652,6 +1656,7 @@ Select a design to preview shrink-wrap metadata.</pre
         store.shadows.clear();
         store.labels.clear();
         store.best.clear();
+        store.nextPlacementIndex.clear();
       }
 
       function renderOverlayFromStore() {
@@ -1683,22 +1688,33 @@ Select a design to preview shrink-wrap metadata.</pre
 
       function setOverlayStoreFromCollections(collections) {
         const store = appState.overlayStore;
+        const parcelFeatures = collections.parcels?.features || [];
+        const shadowFeatures = collections.shadows?.features || [];
+        const placementFeatures = collections.placements?.features || [];
+        if (
+          !parcelFeatures.length &&
+          !shadowFeatures.length &&
+          !placementFeatures.length
+        ) {
+          return;
+        }
         clearOverlayStore();
-        (collections.parcels?.features || []).forEach((feature, index) => {
+        store.nextPlacementIndex.clear();
+        parcelFeatures.forEach((feature, index) => {
           const key =
             feature.properties?.parcelId ||
             feature.properties?.id ||
             `parcel-${index}`;
           store.parcels.set(key, feature);
         });
-        (collections.shadows?.features || []).forEach((feature, index) => {
+        shadowFeatures.forEach((feature, index) => {
           const key =
             feature.properties?.parcelId ||
             feature.properties?.id ||
             `shadow-${index}`;
           store.shadows.set(key, feature);
         });
-        (collections.placements?.features || []).forEach((feature, index) => {
+        placementFeatures.forEach((feature, index) => {
           const key =
             feature.properties?.placementKey ||
             feature.properties?.id ||

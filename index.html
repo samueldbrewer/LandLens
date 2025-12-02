@@ -236,6 +236,19 @@
         margin-top: 4px;
         white-space: pre-wrap;
       }
+      .event-log {
+        background: #020617;
+        color: #c7d2fe;
+        border-radius: 6px;
+        padding: 8px;
+        font-size: 0.75rem;
+        line-height: 1.35;
+        max-height: 180px;
+        overflow-y: auto;
+        margin-top: 4px;
+        white-space: pre-wrap;
+        border: 1px solid rgba(99, 102, 241, 0.4);
+      }
 
       @media (max-width: 640px) {
         .control-panel {
@@ -324,6 +337,13 @@ Select a design to preview shrink-wrap metadata.</pre
         <strong style="color: #0f172a">Backend log (latest)</strong>
         <pre id="logTail" class="log-tail">No log output yet.</pre>
       </div>
+      <div class="panel-section desktop-only">
+        <strong style="color: #0f172a">Live event stream</strong>
+        <p class="panel-status" style="margin: 4px 0 0">
+          Raw parcel / placement events as they arrive from the crawler.
+        </p>
+        <pre id="eventStreamLog" class="event-log">No events yet.</pre>
+      </div>
     </div>
     <div id="status" class="status-banner hidden"></div>
     <div id="map"></div>
@@ -347,6 +367,7 @@ Select a design to preview shrink-wrap metadata.</pre
       const JOB_GEO_POLL_MS = 4000;
       const JOB_ARTIFACT_POLL_MS = 8000;
       const EVENT_POLL_INTERVAL_MS = 1500;
+      const EVENT_LOG_LIMIT = 200;
       const EMPTY_GEOJSON = { type: "FeatureCollection", features: [] };
 
       maplibregl.workerUrl = "./maplibre-gl-csp-worker.js";
@@ -369,6 +390,7 @@ Select a design to preview shrink-wrap metadata.</pre
         shadowSummary: document.getElementById("shadowSummary"),
         logTail: document.getElementById("logTail"),
         designPreview: document.getElementById("designPreview"),
+        eventStreamLog: document.getElementById("eventStreamLog"),
       };
 
       const appState = {
@@ -405,6 +427,7 @@ Select a design to preview shrink-wrap metadata.</pre
           best: new Map(),
           nextPlacementIndex: new Map(),
         },
+        eventFeed: [],
       };
 
       function getDesignFilename(design) {
@@ -829,6 +852,33 @@ Select a design to preview shrink-wrap metadata.</pre
         );
       }
 
+      function appendEventFeedEntry(entry) {
+        if (!ui.eventStreamLog) return;
+        appState.eventFeed.push(entry);
+        if (appState.eventFeed.length > EVENT_LOG_LIMIT) {
+          appState.eventFeed.shift();
+        }
+        ui.eventStreamLog.textContent = appState.eventFeed.join("\n\n");
+      }
+
+      function resetEventFeed() {
+        appState.eventFeed = [];
+        if (ui.eventStreamLog) {
+          ui.eventStreamLog.textContent = "No events yet.";
+        }
+      }
+
+      function recordCrawlerEventSummary(type, payload) {
+        const timestamp = new Date().toLocaleTimeString();
+        if (payload && Object.keys(payload).length) {
+          appendEventFeedEntry(
+            `[${timestamp}] ${type}\n${JSON.stringify(payload, null, 2)}`,
+          );
+        } else {
+          appendEventFeedEntry(`[${timestamp}] ${type}`);
+        }
+      }
+
       async function fetchJSON(path, options = {}) {
         const controller = new AbortController();
         const signal = options.signal || controller.signal;
@@ -1016,6 +1066,7 @@ Select a design to preview shrink-wrap metadata.</pre
         setControlsDisabled(true);
         updateJobSource(EMPTY_GEOJSON);
         clearOverlayData();
+        resetEventFeed();
         updateJobMeta("");
         updateJobStatus("Preparing job...");
         let address;
@@ -1277,6 +1328,14 @@ Select a design to preview shrink-wrap metadata.</pre
         const parcelKey = parcelId ?? "__unknown__";
         appState.overlayStore.nextPlacementIndex.set(parcelKey, 0);
         upsertParcelFeature(feature, parcelId);
+        const summary = {
+          parcelId: parcelId || parcelData.LOWPARCELID || "unknown",
+          area_sqm: parcelData._area_sq_m
+            ? Number(parcelData._area_sq_m).toFixed(1)
+            : undefined,
+          zoning: parcelData.official_zoning || parcelData.zoning_classification,
+        };
+        recordCrawlerEventSummary("parcel_started", summary);
       }
 
       function handlePlacementScoredEvent(event) {
@@ -1285,9 +1344,9 @@ Select a design to preview shrink-wrap metadata.</pre
         if (!placement) return;
         const parcelId =
           event.parcel_id || placement.parcel_id || placement.parcelId;
+        const parcelKey = parcelId ?? "__unknown__";
         const feature = createPlacementFeature(placement, parcelId, false);
         if (feature) {
-          const parcelKey = parcelId ?? "__unknown__";
           const nextIndex =
             appState.overlayStore.nextPlacementIndex.get(parcelKey) || 0;
           appState.overlayStore.nextPlacementIndex.set(
@@ -1307,6 +1366,15 @@ Select a design to preview shrink-wrap metadata.</pre
             `${parcelId || "parcel"}-${placement.sequence || Date.now()}-shadow`;
           upsertShadowFeature(shadowFeature, shadowKey);
         }
+        const summary = {
+          parcelId: parcelId || "unknown",
+          score: getPlacementCompositeScore(placement),
+          rotation_deg: placement.rotation_deg,
+          offset: [placement.offset_x_m, placement.offset_y_m],
+          sequence: placement.sequence,
+          workers: placement.worker_id,
+        };
+        recordCrawlerEventSummary("placement_scored", summary);
       }
 
       function handleBestUpdatedEvent(event) {
@@ -1326,6 +1394,13 @@ Select a design to preview shrink-wrap metadata.</pre
             `${parcelId || "parcel"}-best-shadow`,
           );
         }
+        const summary = {
+          parcelId: parcelId || "unknown",
+          score: getPlacementCompositeScore(placement),
+          rotation_deg: placement.rotation_deg,
+          offset: [placement.offset_x_m, placement.offset_y_m],
+        };
+        recordCrawlerEventSummary("best_updated", summary);
       }
 
       function isTerminalStatus(status) {
@@ -1874,6 +1949,20 @@ Select a design to preview shrink-wrap metadata.</pre
         };
       }
 
+      function getPlacementCompositeScore(placement) {
+        if (!placement) return null;
+        const value =
+          placement.composite_score ??
+          placement.composite ??
+          placement.score ??
+          placement.score_total ??
+          placement.scores?.composite ??
+          null;
+        if (value == null) return null;
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric : null;
+      }
+
       function createPlacementFeature(placement, parcelId, isBest) {
         const geometry =
           normalizePolygonGeometry(placement.footprint_geojson) ||
@@ -1884,13 +1973,7 @@ Select a design to preview shrink-wrap metadata.</pre
               placement.coordinates,
           );
         if (!geometry) return null;
-        const composite =
-          placement.composite_score ??
-          placement.composite ??
-          placement.score ??
-          placement.score_total ??
-          placement.scores?.composite ??
-          null;
+        const composite = getPlacementCompositeScore(placement);
         return {
           type: "Feature",
           geometry,
@@ -1961,29 +2044,14 @@ Select a design to preview shrink-wrap metadata.</pre
           if (!placements.length) return;
           let bestScore = -Infinity;
           placements.forEach((placement) => {
-            const composite =
-              placement.composite_score ??
-              placement.composite ??
-              placement.score ??
-              placement.score_total ??
-              placement.scores?.composite ??
-              null;
-            if (composite != null) {
-              const numericScore = Number(composite);
-              if (!Number.isNaN(numericScore) && numericScore > bestScore) {
-                bestScore = numericScore;
-              }
+            const composite = getPlacementCompositeScore(placement);
+            if (composite != null && composite > bestScore) {
+              bestScore = composite;
             }
           });
           placements.forEach((placement) => {
-            const composite =
-              placement.composite_score ??
-              placement.composite ??
-              placement.score ??
-              placement.score_total ??
-              placement.scores?.composite ??
-              null;
-            const numericScore = Number(composite);
+            const composite = getPlacementCompositeScore(placement);
+            const numericScore = composite;
             const isBest =
               bestScore !== -Infinity && !Number.isNaN(numericScore)
                 ? numericScore === bestScore
@@ -2117,6 +2185,7 @@ Select a design to preview shrink-wrap metadata.</pre
         updateJobSource(EMPTY_GEOJSON);
         updateLogTail("");
         clearOverlayData();
+        resetEventFeed();
         stopEventStream();
       }
 

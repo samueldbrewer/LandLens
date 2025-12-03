@@ -596,12 +596,14 @@
       </div>
       <div class="panel-section panel-log desktop-only">
         <strong>Live activity</strong>
-        <div
-          id="eventStreamLog"
-          class="log-thread"
-          data-has-entries="false"
-        >
-No activity yet.</div>
+        <div id="statusFeed" class="status-feed">
+          <div class="status-item muted">
+            <div class="status-dot"></div>
+            <div>
+              <div class="status-message">No activity yet.</div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="panel-section desktop-only" id="layerSummary">
         <div class="panel-status" id="parcelSummary">Parcels: 0</div>
@@ -673,6 +675,7 @@ No activity yet.</div>
       const EVENT_POLL_INTERVAL_MS = 1500;
       const EVENT_POLL_MAX_BYTES = 200000;
       const EVENT_LOG_LIMIT = 200;
+      const STATUS_FEED_LIMIT = 8;
       const EMPTY_GEOJSON = { type: "FeatureCollection", features: [] };
 
       maplibregl.workerUrl = "./maplibre-gl-csp-worker.js";
@@ -694,7 +697,7 @@ No activity yet.</div>
         parcelSummary: document.getElementById("parcelSummary"),
         placementSummary: document.getElementById("placementSummary"),
         shadowSummary: document.getElementById("shadowSummary"),
-        eventStreamLog: document.getElementById("eventStreamLog"),
+        statusFeed: document.getElementById("statusFeed"),
         desktopDesignList: document.getElementById("desktopDesignList"),
         mobileDesignToggle: document.getElementById("mobileDesignToggle"),
         mobileDesignMenu: document.getElementById("mobileDesignMenu"),
@@ -748,6 +751,7 @@ No activity yet.</div>
         activeParcelPopupId: null,
         leaderboardEntries: [],
         leaderboardSelectedId: null,
+        statusFeedMessage: "No activity yet.",
         overlayStore: {
           parcels: new Map(),
           placements: new Map(),
@@ -1225,50 +1229,62 @@ No activity yet.</div>
 
       function logMessage(message, payload, level = "info") {
         const timestamp = new Date().toLocaleTimeString();
+        const consolePayload =
+          payload != null && typeof payload !== "undefined" ? payload : "";
         console[level === "error" ? "error" : "log"](
           `[${timestamp}] ${message}`,
-          payload || "",
+          consolePayload,
         );
-        let payloadText = "";
-        if (payload != null) {
-          if (typeof payload === "string") {
-            payloadText = `\n${payload}`;
-          } else {
-            try {
-              payloadText = `\n${JSON.stringify(payload, null, 2)}`;
-            } catch (err) {
-              payloadText = "";
-            }
-          }
-        }
-        appendEventFeedEntry(`[${timestamp}] ${message}${payloadText}`);
       }
 
-      function appendEventFeedEntry(entry) {
-        if (!ui.eventStreamLog) return;
-        if (ui.eventStreamLog.dataset.hasEntries !== "true") {
-          ui.eventStreamLog.textContent = "";
-          ui.eventStreamLog.dataset.hasEntries = "true";
+      function renderStatusFeed() {
+        if (!ui.statusFeed) return;
+        if (!appState.eventFeed.length) {
+          ui.statusFeed.innerHTML = `<div class="status-item muted"><div class="status-dot"></div><div><div class="status-message">${appState.statusFeedMessage || "No activity yet."}</div></div></div>`;
+          return;
         }
-        appState.eventFeed.push(entry);
-        if (appState.eventFeed.length > EVENT_LOG_LIMIT) {
+        const items = appState.eventFeed
+          .slice()
+          .reverse()
+          .map(
+            (entry) => `
+          <div class="status-item ${entry.tone || "info"}">
+            <div class="status-dot"></div>
+            <div>
+              <div class="status-message">${entry.message}</div>
+              <div class="status-time">${entry.time}</div>
+            </div>
+          </div>
+        `,
+          )
+          .join("");
+        ui.statusFeed.innerHTML = items;
+      }
+
+      function pushStatusUpdate(message, tone = "info") {
+        appState.eventFeed.push({
+          message,
+          tone,
+          time: new Date().toLocaleTimeString(),
+        });
+        if (appState.eventFeed.length > STATUS_FEED_LIMIT) {
           appState.eventFeed.shift();
         }
-        ui.eventStreamLog.textContent = appState.eventFeed.join("\n\n");
-        ui.eventStreamLog.scrollTop = ui.eventStreamLog.scrollHeight;
+        renderStatusFeed();
       }
 
       function resetEventFeed(message) {
         appState.eventFeed = [];
-        if (ui.eventStreamLog) {
-          ui.eventStreamLog.dataset.hasEntries = "false";
-          ui.eventStreamLog.textContent =
-            message || "Activity will stream here.";
-        }
+        appState.statusFeedMessage = message || "No activity yet.";
+        renderStatusFeed();
       }
 
       function recordCrawlerEventSummary(event, payload) {
-        const type = event?.type || event?.event || "event";
+        const typeRaw = event?.type || event?.event || "event";
+        const eventType = String(typeRaw).toLowerCase();
+        if (eventType === "placement_scored") {
+          return;
+        }
         const timestampSource = event?.timestamp || event?.time;
         let timestamp = new Date().toLocaleTimeString();
         if (timestampSource) {
@@ -1277,19 +1293,52 @@ No activity yet.</div>
             timestamp = date.toLocaleTimeString();
           }
         }
-        const base = {};
-        if (event?.parcel_id) base.parcelId = event.parcel_id;
-        if (event?.index != null) base.index = event.index;
-        if (event?.sequence != null) base.sequence = event.sequence;
-        const merged =
-          payload && Object.keys(payload).length
-            ? { ...base, ...payload }
-            : base;
-        const content =
-          merged && Object.keys(merged).length
-            ? `\n${JSON.stringify(merged, null, 2)}`
-            : "";
-        appendEventFeedEntry(`[${timestamp}] ${type}${content}`);
+        const parcelId =
+          event?.parcel_id ||
+          payload?.parcel_id ||
+          payload?.parcelId ||
+          "parcel";
+        let message;
+        const score =
+          payload?.score != null
+            ? Number(payload.score).toFixed(1)
+            : payload?.max_composite != null
+              ? Number(payload.max_composite).toFixed(1)
+              : null;
+        switch (eventType) {
+          case "parcel_started":
+            message = `Parcel ${parcelId} started (${payload?.zoning || "zoning n/a"})`;
+            break;
+          case "best_updated":
+            message = `Parcel ${parcelId} best updated${
+              score ? ` (score ${score})` : ""
+            }.`;
+            break;
+          case "parcel_completed":
+            message = `Parcel ${parcelId} completed.`;
+            break;
+          case "parcel_failed":
+            message = `Parcel ${parcelId} failed.`;
+            break;
+          case "parcel_progress":
+            message = `Parcel ${parcelId} progress: ${
+              payload?.placements != null ? `${payload.placements} placements` : "updated"
+            }.`;
+            break;
+          default:
+            message = `Event ${eventType.replace(/_/g, " ")} for parcel ${parcelId}.`;
+            break;
+        }
+        let tone = "info";
+        if (eventType === "parcel_failed") {
+          tone = "error";
+        } else if (
+          eventType === "parcel_completed" ||
+          eventType === "best_updated"
+        ) {
+          tone = "success";
+        }
+        pushStatusUpdate(message, tone);
       }
 
       async function fetchJSON(path, options = {}) {
@@ -2170,10 +2219,15 @@ No activity yet.</div>
           startEventStream(appState.job.id);
           requestOverlayRefresh(2500);
           setDesktopLeaderboardVisibility(true);
+          pushStatusUpdate(
+            `Job ${appState.job.id || ""} queued. Waiting for worker...`,
+            "info",
+          );
         } catch (err) {
           console.error(err);
           updateJobStatus(`Failed to start job: ${err.message}`, "error");
           logMessage("Job start failed", { error: err.message }, "error");
+          pushStatusUpdate("Job failed to start.", "error");
           setControlsDisabled(false);
         }
       }
@@ -2993,7 +3047,7 @@ No activity yet.</div>
 
       function updateLogTail(text) {
         if (!text) return;
-        appendEventFeedEntry(`[log] ${text}`);
+        pushStatusUpdate(text, "info");
       }
 
       function clearOverlayData() {
@@ -3292,6 +3346,7 @@ No activity yet.</div>
         logMessage("Job finalized", { message, jobId: finishedJobId });
         appState.job = null;
         fetchJobArtifacts(finishedJobId);
+        pushStatusUpdate(message || "Job finished.", "success");
       }
 
       function abortOngoingApiCalls() {
@@ -3317,6 +3372,7 @@ No activity yet.</div>
         updateLogTail("");
         clearOverlayData();
         resetEventFeed("No activity yet.");
+        pushStatusUpdate(reason || "Job cancelled.", "error");
         stopEventStream();
       }
 
@@ -3465,18 +3521,54 @@ No activity yet.</div>
         flex-direction: column;
       }
 
-      .log-thread {
+      .status-feed {
         flex: 1;
-        background: #0f172a;
-        color: #f8fafc;
-        border-radius: 14px;
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background: #ffffff;
         padding: 12px;
-        font-family: "SFMono-Regular", Consolas, monospace;
-        font-size: 0.8rem;
-        line-height: 1.4;
-        overflow-y: auto;
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        white-space: pre-wrap;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 120px;
+      }
+
+      .status-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+
+      .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #2563eb;
+        margin-top: 6px;
+      }
+
+      .status-item.error .status-dot {
+        background: #dc2626;
+      }
+
+      .status-item.success .status-dot {
+        background: #16a34a;
+      }
+
+      .status-item.muted .status-dot {
+        background: rgba(148, 163, 184, 0.6);
+      }
+
+      .status-message {
+        font-size: 0.9rem;
+        color: #0f172a;
+        font-weight: 600;
+      }
+
+      .status-time {
+        font-size: 0.75rem;
+        color: #64748b;
+        margin-top: 2px;
       }
       .visually-hidden {
         position: absolute;

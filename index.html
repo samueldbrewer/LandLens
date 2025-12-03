@@ -429,6 +429,7 @@ No job config prepared yet.</pre
       let longPressTimer;
       let longPressCoords = null;
       let suppressNextClick = false;
+      let addressPopup = null;
 
       const statusEl = document.getElementById("status");
       const ui = {
@@ -1531,12 +1532,17 @@ No job config prepared yet.</pre
       }
 
       async function showAddressPopup(lngLat) {
+        if (addressPopup) {
+          addressPopup.remove();
+          addressPopup = null;
+          return;
+        }
         try {
           const address = await reverseGeocode(lngLat);
-          showPopup(lngLat, address);
+          addressPopup = showPopup(lngLat, address);
         } catch (err) {
           setStatus(`Reverse geocode failed: ${err.message}`, "error");
-          showPopup(lngLat, "Unable to retrieve address");
+          addressPopup = showPopup(lngLat, "Unable to retrieve address");
           console.error(err);
         }
       }
@@ -2807,12 +2813,18 @@ No job config prepared yet.</pre
       }
 
       function showPopup(lngLat, text) {
-        new maplibregl.Popup()
+        const popup = new maplibregl.Popup()
           .setLngLat(lngLat)
           .setHTML(
             `<strong>${text}</strong><br>Lat: ${lngLat.lat.toFixed(5)}, Lng: ${lngLat.lng.toFixed(5)}`,
           )
           .addTo(map);
+        popup.on("close", () => {
+          if (addressPopup === popup) {
+            addressPopup = null;
+          }
+        });
+        return popup;
       }
 
       function attachLongPressHandler() {

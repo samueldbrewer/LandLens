@@ -73,37 +73,37 @@
 
       .control-panel {
         position: absolute;
-        top: 16px;
-        left: 16px;
-        width: 380px;
-        background: rgba(15, 23, 42, 0.94);
-        border-radius: 18px;
-        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
-        padding: 18px 20px 22px;
+        top: 20px;
+        left: 20px;
+        width: 420px;
+        background: rgba(255, 255, 255, 0.98);
+        border-radius: 22px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+        padding: 22px;
         z-index: 2;
         display: flex;
         flex-direction: column;
-        gap: 16px;
-        color: #f8fafc;
+        gap: 18px;
+        color: #0f172a;
       }
 
       .panel-section h1 {
-        font-size: 1.4rem;
+        font-size: 1.35rem;
         margin: 0;
-        color: #f8fafc;
+        color: #0f172a;
       }
 
       .panel-section p {
         margin: 4px 0 0;
-        color: rgba(241, 245, 249, 0.7);
-        font-size: 0.9rem;
+        color: #475569;
+        font-size: 0.95rem;
         line-height: 1.4;
       }
 
       .panel-section label {
         font-size: 0.9rem;
         font-weight: 600;
-        color: #e2e8f0;
+        color: #0f172a;
         display: flex;
         flex-direction: column;
         gap: 6px;
@@ -120,6 +120,7 @@
 
       .panel-section select {
         background: #fff;
+        display: none;
       }
 
       .panel-section button {
@@ -128,11 +129,13 @@
         color: #fff;
         font-weight: 600;
         cursor: pointer;
-        transition: background 0.2s ease;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        box-shadow: 0 10px 20px rgba(37, 99, 235, 0.25);
       }
 
       .panel-section button:hover {
-        background: linear-gradient(135deg, #1d4ed8, #6d28d9);
+        transform: translateY(-1px);
+        box-shadow: 0 14px 24px rgba(37, 99, 235, 0.3);
       }
 
       .panel-section button:disabled,
@@ -221,6 +224,11 @@
         font-size: 0.85rem;
       }
 
+      .mobile-design-row.active {
+        border-color: #2563eb;
+        box-shadow: 0 8px 18px rgba(37, 99, 235, 0.15);
+      }
+
       .mobile-leaderboard {
         position: absolute;
         left: 0;
@@ -283,6 +291,19 @@
         color: #fcd34d;
       }
 
+      #desktopLeaderboard .leaderboard-row {
+        background: rgba(37, 99, 235, 0.08);
+        color: #0f172a;
+      }
+
+      #desktopLeaderboard .leaderboard-row-score {
+        color: #2563eb;
+      }
+
+      #desktopLeaderboard .leaderboard-row.active {
+        background: rgba(37, 99, 235, 0.18);
+      }
+
       .leaderboard-detail {
         margin-top: 12px;
         background: rgba(15, 23, 42, 0.8);
@@ -291,6 +312,48 @@
         border: 1px solid rgba(148, 163, 184, 0.25);
         max-height: 220px;
         overflow-y: auto;
+      }
+
+      .design-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .desktop-design-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(148, 163, 184, 0.5);
+        background: #fff;
+        cursor: pointer;
+        transition: box-shadow 0.2s ease, border-color 0.2s ease;
+      }
+
+      .desktop-design-row.active {
+        border-color: #2563eb;
+        box-shadow: 0 10px 24px rgba(37, 99, 235, 0.15);
+      }
+
+      .desktop-design-row .design-thumb {
+        width: 110px;
+        height: 80px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        background: #f8fafc;
+      }
+
+      .desktop-design-row strong {
+        display: block;
+        font-size: 0.98rem;
+        color: #0f172a;
+      }
+
+      .desktop-design-row span {
+        color: #475569;
+        font-size: 0.85rem;
       }
 
       .mobile-leaderboard.collapsed .leaderboard-content {
@@ -326,6 +389,22 @@
 
       .leaderboard-detail .parcel-popup a {
         color: #93c5fd;
+      }
+
+      #desktopLeaderboard .leaderboard-detail {
+        background: #fff;
+        border-color: rgba(148, 163, 184, 0.4);
+        color: #0f172a;
+      }
+
+      #desktopLeaderboard .leaderboard-detail .parcel-popup,
+      #desktopLeaderboard .leaderboard-detail .parcel-popup h3,
+      #desktopLeaderboard .leaderboard-detail .parcel-popup .parcel-popup-meta {
+        color: #0f172a;
+      }
+
+      #desktopLeaderboard .leaderboard-detail .parcel-popup a {
+        color: #2563eb;
       }
 
       .btn-secondary {
@@ -398,11 +477,11 @@
       }
 
       .parcel-info {
-        background: #f8fafc;
-        border: 1px solid rgba(148, 163, 184, 0.5);
-        border-radius: 8px;
-        padding: 10px;
-        font-size: 0.85rem;
+        background: #fff;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        border-radius: 10px;
+        padding: 12px;
+        font-size: 0.9rem;
         color: #0f172a;
         max-height: 220px;
         overflow-y: auto;
@@ -415,12 +494,12 @@
 
       .job-status {
         font-weight: 600;
-        color: #f8fafc;
+        color: #0f172a;
       }
 
       .job-meta {
-        font-size: 0.85rem;
-        color: rgba(226, 232, 240, 0.8);
+        font-size: 0.9rem;
+        color: #475569;
         margin-top: 4px;
       }
 
@@ -470,20 +549,21 @@
           below.
         </p>
       </div>
-      <div class="panel-section">
-        <label>
-          Shrink-wrap design
-          <select id="designSelect">
-            <option value="">Loading designs…</option>
-          </select>
-        </label>
-        <div class="panel-actions">
-          <button id="refreshDesignsBtn" type="button">Refresh designs</button>
+      <div class="panel-section" id="designChooser">
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <strong>Designs</strong>
+          <button id="refreshDesignsBtn" type="button" style="width: auto; padding: 6px 12px">
+            Refresh
+          </button>
         </div>
-        <div id="designStatus" class="panel-status"></div>
+        <div id="designStatus" class="panel-status" style="margin-bottom: 8px"></div>
+        <div id="desktopDesignList" class="design-list"></div>
+        <select id="designSelect" class="visually-hidden">
+          <option value="">Loading designs…</option>
+        </select>
       </div>
       <div class="panel-section" id="designPreviewSection">
-        <strong style="color: #f8fafc">Design preview</strong>
+        <strong style="color: #0f172a">Design preview</strong>
         <canvas
           id="designPreviewCanvas"
           width="320"
@@ -527,35 +607,19 @@ Select a design to preview shrink-wrap metadata.</pre
           </button>
         </div>
       </div>
-      <div class="panel-section">
-        <strong style="color: #f8fafc">Job config</strong>
-        <pre
-          id="configPreview"
-          style="
-            background: #0f172a;
-            color: #e2e8f0;
-            padding: 10px;
-            border-radius: 8px;
-            max-height: 200px;
-            overflow-y: auto;
-          "
-        >
-No job config prepared yet.</pre
-        >
-      </div>
       <div class="panel-section desktop-only" id="layerSummary">
         <div class="panel-status" id="parcelSummary">Parcels: 0</div>
         <div class="panel-status" id="placementSummary">Placements: 0</div>
         <div class="panel-status" id="shadowSummary">Shadows: 0</div>
       </div>
       <div class="panel-section" id="parcelInfoSection">
-        <strong style="color: #f8fafc">Parcel details</strong>
+        <strong style="color: #0f172a">Parcel details</strong>
         <div id="parcelInfo" class="parcel-info">
           Tap a highlighted parcel to see zoning, ownership, and score details.
         </div>
       </div>
       <div class="panel-section desktop-only" id="desktopLeaderboard">
-        <strong style="color: #f8fafc">Leaderboard</strong>
+        <strong style="color: #0f172a">Leaderboard</strong>
         <div class="leaderboard-list" id="desktopLeaderboardList"></div>
         <div class="leaderboard-detail" id="desktopLeaderboardDetail">
           Placements will appear here during a crawl.
@@ -640,8 +704,8 @@ No job config prepared yet.</pre
         designPreview: document.getElementById("designPreview"),
         designPreviewCanvas: document.getElementById("designPreviewCanvas"),
         eventStreamLog: document.getElementById("eventStreamLog"),
-        configPreview: document.getElementById("configPreview"),
         parcelInfo: document.getElementById("parcelInfo"),
+        desktopDesignList: document.getElementById("desktopDesignList"),
         mobileDesignToggle: document.getElementById("mobileDesignToggle"),
         mobileDesignMenu: document.getElementById("mobileDesignMenu"),
         mobileDesignList: document.getElementById("mobileDesignList"),
@@ -662,6 +726,7 @@ No job config prepared yet.</pre
       const appState = {
         designs: [],
         selectedDesign: null,
+        selectedDesignIndex: null,
         job: null,
         selectedParcelId: null,
         mobileDesignMenuOpen: false,
@@ -751,7 +816,6 @@ No job config prepared yet.</pre
           ui.mobileDesignCurrent.textContent = "Choose…";
         }
         drawDesignFootprint(null, null);
-        updateConfigPreview();
       }
 
       function renderDesignPreview(design, previewData) {
@@ -796,14 +860,6 @@ No job config prepared yet.</pre
         drawDesignFootprint(design, previewData);
       }
 
-      function updateConfigPreview(config) {
-        if (!ui.configPreview) return;
-        if (!config) {
-          ui.configPreview.textContent = "No job config prepared yet.";
-          return;
-        }
-        ui.configPreview.textContent = JSON.stringify(config, null, 2);
-      }
 
       function drawDesignFootprint(design, previewData, targetCanvas) {
         const canvas = targetCanvas || ui.designPreviewCanvas;
@@ -1370,9 +1426,7 @@ No job config prepared yet.</pre
             `Loaded ${designs.length} design${designs.length === 1 ? "" : "s"}.`,
           );
           logMessage("Designs loaded", { count: designs.length });
-          if (designs.length) {
-            updateDesignPreview(designs[0]);
-          } else {
+          if (!designs.length) {
             resetDesignPreview();
           }
         } catch (err) {
@@ -1398,13 +1452,19 @@ No job config prepared yet.</pre
           option.dataset.index = index;
           select.appendChild(option);
         });
-        select.value =
+        if (
           current &&
           Array.from(select.options).some((opt) => opt.value === current)
-            ? current
-            : "";
-        handleDesignChange();
+        ) {
+          select.value = current;
+        } else if (select.options.length > 1) {
+          select.value = select.options[1].value;
+        } else {
+          select.value = "";
+        }
+        populateDesktopDesignList();
         populateMobileDesignList();
+        handleDesignChange();
       }
 
       function populateMobileDesignList() {
@@ -1442,6 +1502,42 @@ No job config prepared yet.</pre
             canvas,
           );
         });
+        updateDesignRowStates();
+      }
+
+      function populateDesktopDesignList() {
+        if (!ui.desktopDesignList) return;
+        ui.desktopDesignList.innerHTML = "";
+        appState.designs.forEach((design, index) => {
+          const row = document.createElement("button");
+          row.type = "button";
+          row.className = "desktop-design-row";
+          row.dataset.index = String(index);
+          const canvas = document.createElement("canvas");
+          canvas.width = 140;
+          canvas.height = 90;
+          canvas.className = "design-thumb";
+          row.appendChild(canvas);
+          const info = document.createElement("div");
+          info.className = "mobile-design-info";
+          const title = document.createElement("strong");
+          title.textContent = design.name || design.slug || `Design ${index + 1}`;
+          const meta = document.createElement("span");
+          meta.textContent = `${design?.footprint_points?.length || 0} points`;
+          info.appendChild(title);
+          info.appendChild(meta);
+          row.appendChild(info);
+          row.addEventListener("click", () => selectDesignByIndex(index));
+          ui.desktopDesignList.appendChild(row);
+          const cacheKey =
+            design.slug || design.id || design.name || design.dxf_url;
+          drawDesignFootprint(
+            design,
+            appState.designPreviews[cacheKey],
+            canvas,
+          );
+        });
+        updateDesignRowStates();
       }
 
       function selectDesignByIndex(index) {
@@ -1452,8 +1548,26 @@ No job config prepared yet.</pre
         );
         if (option) {
           select.value = option.value;
+          appState.selectedDesignIndex = index;
           handleDesignChange();
         }
+      }
+
+      function updateDesignRowStates() {
+        const activeIndex =
+          typeof appState.selectedDesignIndex === "number"
+            ? appState.selectedDesignIndex
+            : -1;
+        document
+          .querySelectorAll(".mobile-design-row, .desktop-design-row")
+          .forEach((row) => {
+            const idx = Number(row.dataset.index);
+            if (idx === activeIndex) {
+              row.classList.add("active");
+            } else {
+              row.classList.remove("active");
+            }
+          });
       }
 
       function handleDesignChange() {
@@ -1462,6 +1576,8 @@ No job config prepared yet.</pre
         const option = select.selectedOptions[0];
         if (!option || !option.dataset.index) {
           appState.selectedDesign = null;
+          appState.selectedDesignIndex = null;
+          updateDesignRowStates();
           updateJobStatus("Select a design, then click the map.");
           updateJobMeta("");
           resetDesignPreview();
@@ -1469,9 +1585,11 @@ No job config prepared yet.</pre
         }
         const design = appState.designs[Number(option.dataset.index)];
         appState.selectedDesign = design;
+        appState.selectedDesignIndex = Number(option.dataset.index);
         if (ui.mobileDesignCurrent) {
           ui.mobileDesignCurrent.textContent = design.name || design.slug || "Design";
         }
+        updateDesignRowStates();
         updateJobStatus(
           `"${design.name || "Design"}" ready. Click the map to launch a crawl.`,
         );
@@ -1484,7 +1602,6 @@ No job config prepared yet.</pre
           }`,
         );
         updateDesignPreview(design);
-        updateConfigPreview();
       }
 
       function toggleMobileDesignMenu() {
@@ -2143,7 +2260,6 @@ No job config prepared yet.</pre
           dxf_url: design.dxf_url,
           config,
         };
-        updateConfigPreview(config);
         if (Array.isArray(design.footprint_points)) {
           payload.footprint_points = design.footprint_points;
         }
@@ -3451,14 +3567,20 @@ No job config prepared yet.</pre
       loadDesigns();
       updateJobStatus("Select a design, then click the map.");
       resetParcelInfoPanel();
-      updateConfigPreview();
       renderLeaderboard();
     </script>
   </body>
 </html>
       .panel-section {
-        background: rgba(15, 23, 42, 0.6);
-        border: 1px solid rgba(148, 163, 184, 0.25);
-        border-radius: 14px;
-        padding: 14px;
+        background: #f8fafc;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 18px;
+        padding: 16px 18px 18px;
+      }
+      .visually-hidden {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+        height: 0;
+        width: 0;
       }

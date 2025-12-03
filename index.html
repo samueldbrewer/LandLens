@@ -868,15 +868,29 @@ Select a design to preview shrink-wrap metadata.</pre
         }
       }
 
-      function recordCrawlerEventSummary(type, payload) {
-        const timestamp = new Date().toLocaleTimeString();
-        if (payload && Object.keys(payload).length) {
-          appendEventFeedEntry(
-            `[${timestamp}] ${type}\n${JSON.stringify(payload, null, 2)}`,
-          );
-        } else {
-          appendEventFeedEntry(`[${timestamp}] ${type}`);
+      function recordCrawlerEventSummary(event, payload) {
+        const type = event?.type || event?.event || "event";
+        const timestampSource = event?.timestamp || event?.time;
+        let timestamp = new Date().toLocaleTimeString();
+        if (timestampSource) {
+          const date = new Date(timestampSource);
+          if (!Number.isNaN(date.getTime())) {
+            timestamp = date.toLocaleTimeString();
+          }
         }
+        const base = {};
+        if (event?.parcel_id) base.parcelId = event.parcel_id;
+        if (event?.index != null) base.index = event.index;
+        if (event?.sequence != null) base.sequence = event.sequence;
+        const merged =
+          payload && Object.keys(payload).length
+            ? { ...base, ...payload }
+            : base;
+        const content =
+          merged && Object.keys(merged).length
+            ? `\n${JSON.stringify(merged, null, 2)}`
+            : "";
+        appendEventFeedEntry(`[${timestamp}] ${type}${content}`);
       }
 
       async function fetchJSON(path, options = {}) {
@@ -1302,6 +1316,7 @@ Select a design to preview shrink-wrap metadata.</pre
               break;
             case "parcel_completed":
             case "parcel_failed":
+              recordCrawlerEventSummary(event);
               requestOverlayRefresh(1000);
               break;
             default:
@@ -1329,13 +1344,12 @@ Select a design to preview shrink-wrap metadata.</pre
         appState.overlayStore.nextPlacementIndex.set(parcelKey, 0);
         upsertParcelFeature(feature, parcelId);
         const summary = {
-          parcelId: parcelId || parcelData.LOWPARCELID || "unknown",
           area_sqm: parcelData._area_sq_m
             ? Number(parcelData._area_sq_m).toFixed(1)
             : undefined,
           zoning: parcelData.official_zoning || parcelData.zoning_classification,
         };
-        recordCrawlerEventSummary("parcel_started", summary);
+        recordCrawlerEventSummary(event, summary);
       }
 
       function handlePlacementScoredEvent(event) {
@@ -1367,14 +1381,13 @@ Select a design to preview shrink-wrap metadata.</pre
           upsertShadowFeature(shadowFeature, shadowKey);
         }
         const summary = {
-          parcelId: parcelId || "unknown",
           score: getPlacementCompositeScore(placement),
           rotation_deg: placement.rotation_deg,
           offset: [placement.offset_x_m, placement.offset_y_m],
           sequence: placement.sequence,
-          workers: placement.worker_id,
+          worker: placement.worker_id,
         };
-        recordCrawlerEventSummary("placement_scored", summary);
+        recordCrawlerEventSummary(event, summary);
       }
 
       function handleBestUpdatedEvent(event) {
@@ -1395,12 +1408,11 @@ Select a design to preview shrink-wrap metadata.</pre
           );
         }
         const summary = {
-          parcelId: parcelId || "unknown",
           score: getPlacementCompositeScore(placement),
           rotation_deg: placement.rotation_deg,
           offset: [placement.offset_x_m, placement.offset_y_m],
         };
-        recordCrawlerEventSummary("best_updated", summary);
+        recordCrawlerEventSummary(event, summary);
       }
 
       function isTerminalStatus(status) {

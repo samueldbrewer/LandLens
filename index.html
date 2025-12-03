@@ -1847,18 +1847,20 @@ Select a design to preview shrink-wrap metadata.</pre
         });
         const placementCounts = new Map();
         placementFeatures.forEach((feature, index) => {
+          const parcelIdForFeature =
+            feature.properties?.parcelId ||
+            feature.properties?.id ||
+            "parcel";
           const key =
             feature.properties?.placementKey ||
-            feature.properties?.id ||
-            `placement-${index}`;
+            `${parcelIdForFeature}-placement-${index}`;
           if (feature.properties?.isBest) {
             const parcelId =
               feature.properties?.parcelId || feature.properties?.id || key;
             store.best.set(parcelId, feature);
           } else {
             store.placements.set(key, feature);
-            const parcelIdForCount =
-              feature.properties?.parcelId || feature.properties?.id || key;
+            const parcelIdForCount = parcelIdForFeature;
             const current = placementCounts.get(parcelIdForCount) || 0;
             placementCounts.set(parcelIdForCount, current + 1);
           }
@@ -1994,6 +1996,8 @@ Select a design to preview shrink-wrap metadata.</pre
           placement.position ??
           placement.rank ??
           null;
+        const parcelKey =
+          parcelId || placement.parcel_id || placement.parcelId || "parcel";
         const geometry =
           normalizePolygonGeometry(placement.footprint_geojson) ||
           normalizePolygonGeometry(
@@ -2004,6 +2008,14 @@ Select a design to preview shrink-wrap metadata.</pre
           );
         if (!geometry) return null;
         const composite = getPlacementCompositeScore(placement);
+        const fallbackSuffix =
+          placementIndex != null
+            ? `idx-${placementIndex}`
+            : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const placementKey =
+          placement.id ||
+          placement.placement_id ||
+          `${parcelKey || "parcel"}-${fallbackSuffix}`;
         return {
           type: "Feature",
           geometry,
@@ -2013,6 +2025,7 @@ Select a design to preview shrink-wrap metadata.</pre
             rawScore: composite,
             isBest: Boolean(isBest),
             index: placementIndex,
+            placementKey,
           },
         };
       }

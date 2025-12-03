@@ -87,6 +87,7 @@
         color: #0f172a;
         max-height: calc(100vh - 40px);
         overflow-y: auto;
+        border: 1px solid rgba(148, 163, 184, 0.35);
       }
 
       .panel-section h1 {
@@ -607,12 +608,6 @@ No activity yet.</div>
         <div class="panel-status" id="placementSummary">Placements: 0</div>
         <div class="panel-status" id="shadowSummary">Shadows: 0</div>
       </div>
-      <div class="panel-section" id="parcelInfoSection">
-        <strong style="color: #0f172a">Parcel details</strong>
-        <div id="parcelInfo" class="parcel-info">
-          Tap a highlighted parcel to see zoning, ownership, and score details.
-        </div>
-      </div>
     </div>
     <div class="mobile-only">
       <div class="mobile-bar">
@@ -700,7 +695,6 @@ No activity yet.</div>
         placementSummary: document.getElementById("placementSummary"),
         shadowSummary: document.getElementById("shadowSummary"),
         eventStreamLog: document.getElementById("eventStreamLog"),
-        parcelInfo: document.getElementById("parcelInfo"),
         desktopDesignList: document.getElementById("desktopDesignList"),
         mobileDesignToggle: document.getElementById("mobileDesignToggle"),
         mobileDesignMenu: document.getElementById("mobileDesignMenu"),
@@ -1646,12 +1640,7 @@ No activity yet.</div>
         return detail;
       }
 
-      function resetParcelInfoPanel(message) {
-        if (!ui.parcelInfo) return;
-        ui.parcelInfo.textContent =
-          message ||
-          "Tap a highlighted parcel to see zoning, ownership, and score details.";
-      }
+      function resetParcelInfoPanel(message) {}
 
       function formatOwner(parcel) {
         const owners = [parcel?.OWNERNME1, parcel?.OWNERNME2].filter(Boolean);
@@ -1668,107 +1657,7 @@ No activity yet.</div>
         return null;
       }
 
-      function updateParcelInfoPanel(parcelId) {
-        if (!ui.parcelInfo) return;
-        if (!parcelId) {
-          resetParcelInfoPanel();
-          return;
-        }
-        const detail = getParcelDetail(parcelId);
-        if (!detail) {
-          ui.parcelInfo.textContent = "Looking up parcel details…";
-          return;
-        }
-        const parcel = detail.parcel || {};
-        const summary = detail.summary || {};
-        const lines = [];
-        const address =
-          parcel.SITEADDRESS ||
-          parcel.official_address ||
-          parcel.county_address ||
-          summary.address ||
-          "";
-        if (address) {
-          lines.push(address);
-        }
-        lines.push(`Parcel ID: ${parcel.LOWPARCELID || parcel.parcel_id || parcelId}`);
-        const owner = formatOwner(parcel);
-        if (owner) lines.push(`Owner: ${owner}`);
-        if (parcel.official_zoning) {
-          lines.push(`Zoning: ${parcel.official_zoning}`);
-        }
-        if (
-          parcel.zoning_classification &&
-          parcel.zoning_classification !== parcel.official_zoning
-        ) {
-          lines.push(`Classification: ${parcel.zoning_classification}`);
-        }
-        if (parcel.document?.DOC_NAME) {
-          const docDate =
-            parcel.document.formatted_record_date ||
-            (parcel.document.RECORD_DATE
-              ? new Date(parcel.document.RECORD_DATE).toLocaleDateString()
-              : "");
-          const docLine = docDate
-            ? `${parcel.document.DOC_NAME} (${docDate})`
-            : parcel.document.DOC_NAME;
-          lines.push(`Document: ${docLine}`);
-        }
-        const overlayList = formatOverlays(parcel);
-        if (overlayList) {
-          lines.push(`Overlays: ${overlayList}`);
-        }
-        if (parcel.future_land_use) {
-          lines.push(`Future land use: ${parcel.future_land_use}`);
-        }
-        if (parcel.land_lot_page) {
-          lines.push(`Land lot: ${parcel.land_lot_page}`);
-        }
-        if (parcel.tax_assessor_link) {
-          lines.push(`Tax assessor: ${parcel.tax_assessor_link}`);
-        }
-        if (parcel.council_district) {
-          lines.push(`Council district: ${parcel.council_district}`);
-        }
-        if (parcel.npu) {
-          lines.push(`NPU: ${parcel.npu}`);
-        }
-        if (parcel._area_sq_m) {
-          const acres = (Number(parcel._area_sq_m) * 0.000247105).toFixed(2);
-          lines.push(
-            `Area: ${Number(parcel._area_sq_m).toFixed(1)} m² (${acres} acres)`,
-          );
-        }
-        if (summary.viable_count != null) {
-          lines.push(`Viable placements: ${summary.viable_count}`);
-        }
-        if (summary.max_composite != null) {
-          lines.push(
-            `Best composite score: ${Number(summary.max_composite).toFixed(1)}`,
-          );
-        }
-        if (detail.bestPlacement?.rotation_deg != null) {
-          const best = detail.bestPlacement;
-          const offsetX =
-            best.offset_x_m ??
-            (Array.isArray(best.offset) ? best.offset[0] : null);
-          const offsetY =
-            best.offset_y_m ??
-            (Array.isArray(best.offset) ? best.offset[1] : null);
-          const offsetLine =
-            offsetX != null && offsetY != null
-              ? ` | Offset (${offsetX}, ${offsetY})`
-              : "";
-          lines.push(
-            `Best orientation: ${best.rotation_deg}°${offsetLine}`,
-          );
-        }
-        if (!lines.length) {
-          ui.parcelInfo.textContent = "Parcel metadata will appear here.";
-          return;
-        }
-        ui.parcelInfo.textContent = lines.join("\n");
-      }
+      function updateParcelInfoPanel() {}
 
       function formatParcelDetailHtml(detail) {
         if (!detail) return "<div class=\"parcel-popup\">No details available.</div>";

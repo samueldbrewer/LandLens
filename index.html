@@ -314,6 +314,19 @@
       </div>
       <div class="panel-section" id="designPreviewSection">
         <strong style="color: #0f172a">Design preview</strong>
+        <canvas
+          id="designPreviewCanvas"
+          width="320"
+          height="200"
+          style="
+            width: 100%;
+            height: 180px;
+            border: 1px solid rgba(148, 163, 184, 0.5);
+            border-radius: 8px;
+            background: #f1f5f9;
+            margin-bottom: 8px;
+          "
+        ></canvas>
         <pre
           id="designPreview"
           style="
@@ -430,6 +443,7 @@ No job config prepared yet.</pre
         shadowSummary: document.getElementById("shadowSummary"),
         logTail: document.getElementById("logTail"),
         designPreview: document.getElementById("designPreview"),
+        designPreviewCanvas: document.getElementById("designPreviewCanvas"),
         eventStreamLog: document.getElementById("eventStreamLog"),
         configPreview: document.getElementById("configPreview"),
         parcelInfo: document.getElementById("parcelInfo"),
@@ -513,9 +527,11 @@ No job config prepared yet.</pre
       }
 
       function resetDesignPreview() {
-        if (!ui.designPreview) return;
-        ui.designPreview.textContent =
-          "Select a design to preview shrink-wrap metadata.";
+        if (ui.designPreview) {
+          ui.designPreview.textContent =
+            "Select a design to preview shrink-wrap metadata.";
+        }
+        drawDesignFootprint(null, null);
       }
 
       function renderDesignPreview(design, previewData) {
@@ -526,17 +542,18 @@ No job config prepared yet.</pre
         }
         const lines = [];
         lines.push(`Name: ${design.name || design.slug || "Untitled"}`);
-        const footprintCount = design?.footprint_points?.length;
-        lines.push(
-          `Footprint points: ${
-            typeof footprintCount === "number" ? footprintCount : "n/a"
-          }`,
-        );
+        const footprintCount =
+          design?.footprint_points?.length ||
+          previewData?.footprint_points?.length ||
+          0;
+        lines.push(`Footprint points: ${footprintCount}`);
+        const front =
+          design?.front_direction ||
+          previewData?.front_direction ||
+          previewData?.front_points;
         lines.push(
           `Front direction: ${
-            design?.front_direction
-              ? JSON.stringify(design.front_direction)
-              : "auto"
+            Array.isArray(front) ? JSON.stringify(front) : "auto"
           }`,
         );
         if (previewData) {
@@ -556,6 +573,56 @@ No job config prepared yet.</pre
           );
         }
         ui.designPreview.textContent = lines.join("\n");
+        drawDesignFootprint(design, previewData);
+      }
+
+      function drawDesignFootprint(design, previewData) {
+        const canvas = ui.designPreviewCanvas;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const points =
+          (Array.isArray(design?.footprint_points) &&
+            design.footprint_points.length &&
+            design.footprint_points) ||
+          (Array.isArray(previewData?.footprint_points) &&
+            previewData.footprint_points.length &&
+            previewData.footprint_points) ||
+          null;
+        if (!points || points.length < 3) {
+          ctx.fillStyle = "#94a3b8";
+          ctx.font = "12px system-ui";
+          ctx.fillText("No footprint available", 10, canvas.height / 2);
+          return;
+        }
+        const xs = points.map((p) => p[0]);
+        const ys = points.map((p) => p[1]);
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        const pad = 12;
+        const usableWidth = canvas.width - pad * 2;
+        const usableHeight = canvas.height - pad * 2;
+        const spanX = maxX - minX || 1;
+        const spanY = maxY - minY || 1;
+        const scale = Math.min(usableWidth / spanX, usableHeight / spanY);
+        ctx.fillStyle = "#bfdbfe";
+        ctx.strokeStyle = "#1d4ed8";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        points.forEach((point, index) => {
+          const x = pad + (point[0] - minX) * scale;
+          const y = canvas.height - pad - (point[1] - minY) * scale;
+          if (index === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
       }
 
       async function updateDesignPreview(design) {

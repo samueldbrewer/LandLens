@@ -1836,8 +1836,6 @@ Select a design to preview shrink-wrap metadata.</pre
         ) {
           return;
         }
-        clearOverlayStore();
-        store.nextPlacementIndex.clear();
         parcelFeatures.forEach((feature, index) => {
           const key =
             feature.properties?.parcelId ||

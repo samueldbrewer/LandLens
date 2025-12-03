@@ -365,7 +365,6 @@ Select a design to preview shrink-wrap metadata.</pre
       const PLACEMENT_LABEL_LAYER_ID = "placement-labels-symbol";
       const JOB_STATUS_POLL_MS = 5000;
       const JOB_GEO_POLL_MS = 4000;
-      const JOB_ARTIFACT_POLL_MS = 45000;
       const EVENT_POLL_INTERVAL_MS = 1500;
       const EVENT_POLL_MAX_BYTES = 200000;
       const EVENT_LOG_LIMIT = 200;
@@ -1150,6 +1149,7 @@ Select a design to preview shrink-wrap metadata.</pre
           updateJobMeta("Waiting for first parcels...");
           scheduleJobPolling();
           startEventStream(appState.job.id);
+          requestOverlayRefresh(2500);
         } catch (err) {
           console.error(err);
           updateJobStatus(`Failed to start job: ${err.message}`, "error");
@@ -1581,6 +1581,33 @@ Select a design to preview shrink-wrap metadata.</pre
           logMessage("Artifact polling error", { error: err.message }, "error");
         }
       }
+      async function fetchJobOverlay(jobIdOverride) {
+        const jobId = jobIdOverride || appState.job?.id;
+        if (!jobId) return;
+        logMessage("GET /jobs/{id}/overlay", { id: jobId });
+        try {
+          const data = await fetchJSON(
+            `/jobs/${encodeURIComponent(jobId)}/overlay`,
+            { cache: "no-store" },
+          );
+          if (!data) return;
+          const overlayCollections = {
+            parcels: data.parcels || EMPTY_GEOJSON,
+            placements: data.placements || EMPTY_GEOJSON,
+            shadows: data.shadows || EMPTY_GEOJSON,
+            best: data.best || EMPTY_GEOJSON,
+          };
+          setOverlayStoreFromCollections(overlayCollections);
+        } catch (err) {
+          const message = err?.message || "";
+          if (message.includes("Overlay not available yet")) {
+            logMessage("Overlay pending", { detail: message });
+            return;
+          }
+          console.warn("Overlay fetch error", err);
+          logMessage("Overlay fetch error", { error: message }, "error");
+        }
+      }
       function normalizeGeoResponse(payload) {
         if (!payload) return EMPTY_GEOJSON;
         if (
@@ -1794,7 +1821,7 @@ Select a design to preview shrink-wrap metadata.</pre
         appState.overlayRefreshPending = true;
         setTimeout(() => {
           appState.overlayRefreshPending = false;
-          fetchJobArtifacts();
+          fetchJobOverlay();
         }, delay);
       }
 
@@ -1840,6 +1867,7 @@ Select a design to preview shrink-wrap metadata.</pre
         const parcelFeatures = collections.parcels?.features || [];
         const shadowFeatures = collections.shadows?.features || [];
         const placementFeatures = collections.placements?.features || [];
+        const bestFeatures = collections.best?.features || [];
         if (
           !parcelFeatures.length &&
           !shadowFeatures.length &&
@@ -1862,6 +1890,17 @@ Select a design to preview shrink-wrap metadata.</pre
           store.shadows.set(key, feature);
         });
         const placementCounts = new Map();
+        bestFeatures.forEach((feature) => {
+          const parcelId =
+            feature.properties?.parcelId ||
+            feature.properties?.id ||
+            `best-${Date.now()}`;
+          store.best.set(parcelId, feature);
+          const label = createLabelFeature(feature);
+          if (label) {
+            store.labels.set(`${parcelId}-best-label`, label);
+          }
+        });
         placementFeatures.forEach((feature, index) => {
           const parcelIdForFeature =
             feature.properties?.parcelId ||
@@ -1870,16 +1909,10 @@ Select a design to preview shrink-wrap metadata.</pre
           const key =
             feature.properties?.placementKey ||
             `${parcelIdForFeature}-placement-${index}`;
-          if (feature.properties?.isBest) {
-            const parcelId =
-              feature.properties?.parcelId || feature.properties?.id || key;
-            store.best.set(parcelId, feature);
-          } else {
-            store.placements.set(key, feature);
-            const parcelIdForCount = parcelIdForFeature;
-            const current = placementCounts.get(parcelIdForCount) || 0;
-            placementCounts.set(parcelIdForCount, current + 1);
-          }
+          store.placements.set(key, feature);
+          const parcelIdForCount = parcelIdForFeature;
+          const current = placementCounts.get(parcelIdForCount) || 0;
+          placementCounts.set(parcelIdForCount, current + 1);
           const label = createLabelFeature(feature);
           if (label) {
             store.labels.set(`${key}-label`, label);
@@ -2220,6 +2253,7 @@ Select a design to preview shrink-wrap metadata.</pre
         updateJobStatus(message || "Job finished.");
         logMessage("Job finalized", { message, jobId: finishedJobId });
         appState.job = null;
+        fetchJobOverlay(finishedJobId);
         fetchJobArtifacts(finishedJobId);
       }
 
@@ -2245,6 +2279,7 @@ Select a design to preview shrink-wrap metadata.</pre
         updateJobSource(EMPTY_GEOJSON);
         updateLogTail("");
         clearOverlayData();
+        fetchJobOverlay(jobId);
         resetEventFeed();
         stopEventStream();
       }

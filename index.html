@@ -394,7 +394,9 @@ No job config prepared yet.</pre
       const JOB_FILL_LAYER_ID = "job-parcels-fill";
       const JOB_LINE_LAYER_ID = "job-parcels-outline";
       const PARCEL_BOUNDARY_SOURCE_ID = "parcel-boundaries";
-      const PARCEL_BOUNDARY_LAYER_ID = "parcel-boundaries-fill";
+      const PARCEL_FILL_LAYER_ID = "parcel-boundaries-fill";
+      const PARCEL_BOUNDARY_LAYER_ID = "parcel-boundaries-outline";
+      const PARCEL_BOUNDARY_SELECTED_LAYER_ID = "parcel-boundaries-outline-selected";
       const PLACEMENT_SOURCE_ID = "parcel-placements";
       const PLACEMENT_LAYER_ID = "parcel-placements-fill";
       const SHADOW_SOURCE_ID = "parcel-shadows";
@@ -809,6 +811,15 @@ No job config prepared yet.</pre
             data: EMPTY_GEOJSON,
           });
           map.addLayer({
+            id: PARCEL_FILL_LAYER_ID,
+            type: "fill",
+            source: PARCEL_BOUNDARY_SOURCE_ID,
+            paint: {
+              "fill-color": "#10b981",
+              "fill-opacity": 0.08,
+            },
+          });
+          map.addLayer({
             id: PARCEL_BOUNDARY_LAYER_ID,
             type: "line",
             source: PARCEL_BOUNDARY_SOURCE_ID,
@@ -818,12 +829,23 @@ No job config prepared yet.</pre
               "line-dasharray": [2, 2],
             },
           });
+          map.addLayer({
+            id: PARCEL_BOUNDARY_SELECTED_LAYER_ID,
+            type: "line",
+            source: PARCEL_BOUNDARY_SOURCE_ID,
+            paint: {
+              "line-color": "#10b981",
+              "line-width": 3,
+              "line-dasharray": [1, 0],
+            },
+            filter: ["==", ["get", "parcelId"], ""],
+          });
           if (!appState.parcelLayerHandlersBound) {
-            map.on("click", PARCEL_BOUNDARY_LAYER_ID, handleParcelFeatureClick);
-            map.on("mouseenter", PARCEL_BOUNDARY_LAYER_ID, () => {
+            map.on("click", PARCEL_FILL_LAYER_ID, handleParcelFeatureClick);
+            map.on("mouseenter", PARCEL_FILL_LAYER_ID, () => {
               map.getCanvas().style.cursor = "pointer";
             });
-            map.on("mouseleave", PARCEL_BOUNDARY_LAYER_ID, () => {
+            map.on("mouseleave", PARCEL_FILL_LAYER_ID, () => {
               map.getCanvas().style.cursor = "";
             });
             appState.parcelLayerHandlersBound = true;
@@ -1401,8 +1423,26 @@ No job config prepared yet.</pre
         if (!normalized) return;
         appState.selectedParcelId = normalized;
         updateParcelInfoPanel(normalized);
+        updateSelectedParcelHighlight();
         await ensureParcelDetailLoaded(normalized);
         updateParcelInfoPanel(normalized);
+      }
+
+      function updateSelectedParcelHighlight() {
+        if (!map || !map.getLayer(PARCEL_BOUNDARY_SELECTED_LAYER_ID)) return;
+        if (appState.selectedParcelId) {
+          map.setFilter(PARCEL_BOUNDARY_SELECTED_LAYER_ID, [
+            "==",
+            ["get", "parcelId"],
+            appState.selectedParcelId,
+          ]);
+        } else {
+          map.setFilter(PARCEL_BOUNDARY_SELECTED_LAYER_ID, [
+            "==",
+            ["get", "parcelId"],
+            "",
+          ]);
+        }
       }
 
       function canStartJob() {
@@ -1466,7 +1506,7 @@ No job config prepared yet.</pre
           front_angle: null,
           auto_offset: true,
           offset_step_scale: 0.2,
-          auto_offset_scale: 5.0,
+          auto_offset_scale: 10.0,
           min_composite: 0.0,
           render_cycle: false,
           render_best: false,
@@ -2348,6 +2388,7 @@ No job config prepared yet.</pre
         appState.parcelArtifactIndex = {};
         appState.selectedParcelId = null;
         resetParcelInfoPanel();
+        updateSelectedParcelHighlight();
       }
 
       function normalizePolygonGeometry(input) {

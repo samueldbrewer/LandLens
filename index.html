@@ -365,7 +365,7 @@ Select a design to preview shrink-wrap metadata.</pre
       const PLACEMENT_LABEL_LAYER_ID = "placement-labels-symbol";
       const JOB_STATUS_POLL_MS = 5000;
       const JOB_GEO_POLL_MS = 4000;
-      const JOB_ARTIFACT_POLL_MS = 8000;
+      const JOB_ARTIFACT_POLL_MS = 45000;
       const EVENT_POLL_INTERVAL_MS = 1500;
       const EVENT_POLL_MAX_BYTES = 200000;
       const EVENT_LOG_LIMIT = 200;
@@ -398,7 +398,7 @@ Select a design to preview shrink-wrap metadata.</pre
         designs: [],
         selectedDesign: null,
         job: null,
-        pollTimers: { status: null, geo: null, artifacts: null },
+        pollTimers: { status: null, geo: null },
         abortControllers: new Set(),
         jobMarker: null,
         overlayCache: {
@@ -1189,10 +1189,6 @@ Select a design to preview shrink-wrap metadata.</pre
           JOB_STATUS_POLL_MS,
         );
         appState.pollTimers.geo = setInterval(fetchJobGeo, JOB_GEO_POLL_MS);
-        appState.pollTimers.artifacts = setInterval(
-          fetchJobArtifacts,
-          JOB_ARTIFACT_POLL_MS,
-        );
       }
 
       function clearJobPolling() {
@@ -1203,10 +1199,6 @@ Select a design to preview shrink-wrap metadata.</pre
         if (appState.pollTimers.geo) {
           clearInterval(appState.pollTimers.geo);
           appState.pollTimers.geo = null;
-        }
-        if (appState.pollTimers.artifacts) {
-          clearInterval(appState.pollTimers.artifacts);
-          appState.pollTimers.artifacts = null;
         }
       }
 
@@ -1523,14 +1515,38 @@ Select a design to preview shrink-wrap metadata.</pre
             .map((entry) => normalizeArtifactUrl(entry?.placements_json_url))
             .filter(Boolean);
           if (!urls.length) return;
-          // Remove cache entries for parcels no longer referenced
           const cache = appState.overlayCache;
           if (cache.jobId && cache.jobId !== jobId) {
             cache.data = {};
             cache.index = 0;
           }
           cache.jobId = jobId;
-          const toFetch = urls;
+          const fetchLimit = Math.min(8, urls.length);
+          const freshUrls = urls.filter((url) => !cache.data[url]);
+          const toFetch = [];
+          while (toFetch.length < fetchLimit && freshUrls.length) {
+            toFetch.push(freshUrls.shift());
+          }
+          if (toFetch.length < fetchLimit) {
+            if (cache.index == null || cache.index >= urls.length) {
+              cache.index = 0;
+            }
+            const seen = new Set(toFetch);
+            let offset = 0;
+            while (toFetch.length < fetchLimit && offset < urls.length) {
+              const idx = (cache.index + offset) % urls.length;
+              const candidate = urls[idx];
+              if (!seen.has(candidate)) {
+                toFetch.push(candidate);
+                seen.add(candidate);
+              }
+              offset += 1;
+            }
+            cache.index = (cache.index + fetchLimit) % urls.length;
+          }
+          if (!toFetch.length) {
+            return;
+          }
           await Promise.all(
             toFetch.map(async (url) => {
               try {

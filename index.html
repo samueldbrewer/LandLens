@@ -1436,31 +1436,34 @@ Select a design to preview shrink-wrap metadata.</pre
           );
           address = `Lat ${lngLat.lat.toFixed(5)}, Lng ${lngLat.lng.toFixed(5)}`;
         }
+        const config = {
+          target_lat: lngLat.lat,
+          target_lon: lngLat.lng,
+          cycles: 10,
+          score_workers: 4,
+          rotation_step: 45,
+          full_rotation: false,
+          buffer: 20,
+          setback: 5,
+          auto_front: true,
+          front_angle: null,
+          auto_offset: true,
+          offset_step_scale: 0.2,
+          auto_offset_scale: 2.0,
+          min_composite: 0.0,
+          render_cycle: false,
+          render_best: false,
+          render_composite: false,
+          skip_roads: true,
+        };
+        if (!config.auto_offset) {
+          config.offset_step = 0.5;
+          config.offset_range = 0.5;
+        }
         const payload = {
           address,
           dxf_url: design.dxf_url,
-          config: {
-            target_lat: lngLat.lat,
-            target_lon: lngLat.lng,
-            cycles: 10,
-            score_workers: 4,
-            rotation_step: 45,
-            full_rotation: false,
-            buffer: 20,
-            setback: 5,
-            auto_front: true,
-            front_angle: null,
-            auto_offset: false,
-            offset_step: 0.5,
-            offset_range: 0.5,
-            offset_step_scale: 0.2,
-            auto_offset_scale: 2.0,
-            min_composite: 0.0,
-            render_cycle: false,
-            render_best: false,
-            render_composite: false,
-            skip_roads: true,
-          },
+          config,
         };
         if (Array.isArray(design.footprint_points)) {
           payload.footprint_points = design.footprint_points;

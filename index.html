@@ -344,6 +344,22 @@ Select a design to preview shrink-wrap metadata.</pre
           </button>
         </div>
       </div>
+      <div class="panel-section">
+        <strong style="color: #0f172a">Job config</strong>
+        <pre
+          id="configPreview"
+          style="
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 10px;
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+          "
+        >
+No job config prepared yet.</pre
+        >
+      </div>
       <div class="panel-section desktop-only" id="layerSummary">
         <div class="panel-status" id="parcelSummary">Parcels: 0</div>
         <div class="panel-status" id="placementSummary">Placements: 0</div>
@@ -413,6 +429,7 @@ Select a design to preview shrink-wrap metadata.</pre
         logTail: document.getElementById("logTail"),
         designPreview: document.getElementById("designPreview"),
         eventStreamLog: document.getElementById("eventStreamLog"),
+        configPreview: document.getElementById("configPreview"),
         parcelInfo: document.getElementById("parcelInfo"),
       };
 
@@ -1449,7 +1466,7 @@ Select a design to preview shrink-wrap metadata.</pre
           front_angle: null,
           auto_offset: true,
           offset_step_scale: 0.2,
-          auto_offset_scale: 2.0,
+          auto_offset_scale: 5.0,
           min_composite: 0.0,
           render_cycle: false,
           render_best: false,

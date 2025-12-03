@@ -551,6 +551,14 @@ Select a design to preview shrink-wrap metadata.</pre
           return;
         }
         renderDesignPreview(design);
+        const hasEmbeddedFootprint =
+          Array.isArray(design.footprint_points) &&
+          design.footprint_points.length > 0 &&
+          Array.isArray(design.front_direction) &&
+          design.front_direction.length >= 2;
+        if (hasEmbeddedFootprint) {
+          return;
+        }
         const filename = getDesignFilename(design);
         if (!filename) return;
         try {
@@ -1941,33 +1949,6 @@ Select a design to preview shrink-wrap metadata.</pre
           logMessage("Artifact polling error", { error: err.message }, "error");
         }
       }
-      async function fetchJobOverlay(jobIdOverride) {
-        const jobId = jobIdOverride || appState.job?.id;
-        if (!jobId) return;
-        logMessage("GET /jobs/{id}/overlay", { id: jobId });
-        try {
-          const data = await fetchJSON(
-            `/jobs/${encodeURIComponent(jobId)}/overlay`,
-            { cache: "no-store" },
-          );
-          if (!data) return;
-          const overlayCollections = {
-            parcels: data.parcels || EMPTY_GEOJSON,
-            placements: data.placements || EMPTY_GEOJSON,
-            shadows: data.shadows || EMPTY_GEOJSON,
-            best: data.best || EMPTY_GEOJSON,
-          };
-          setOverlayStoreFromCollections(overlayCollections);
-        } catch (err) {
-          const message = err?.message || "";
-          if (message.includes("Overlay not available yet")) {
-            logMessage("Overlay pending", { detail: message });
-            return;
-          }
-          console.warn("Overlay fetch error", err);
-          logMessage("Overlay fetch error", { error: message }, "error");
-        }
-      }
       function normalizeGeoResponse(payload) {
         if (!payload) return EMPTY_GEOJSON;
         if (
@@ -2181,7 +2162,7 @@ Select a design to preview shrink-wrap metadata.</pre
         appState.overlayRefreshPending = true;
         setTimeout(() => {
           appState.overlayRefreshPending = false;
-          fetchJobOverlay();
+          fetchJobArtifacts();
         }, delay);
       }
 
@@ -2618,7 +2599,6 @@ Select a design to preview shrink-wrap metadata.</pre
         updateJobStatus(message || "Job finished.");
         logMessage("Job finalized", { message, jobId: finishedJobId });
         appState.job = null;
-        fetchJobOverlay(finishedJobId);
         fetchJobArtifacts(finishedJobId);
       }
 
@@ -2644,7 +2624,6 @@ Select a design to preview shrink-wrap metadata.</pre
         updateJobSource(EMPTY_GEOJSON);
         updateLogTail("");
         clearOverlayData();
-        fetchJobOverlay(jobId);
         resetEventFeed();
         stopEventStream();
       }

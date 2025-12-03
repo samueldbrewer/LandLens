@@ -1505,8 +1505,8 @@ No job config prepared yet.</pre
           auto_front: true,
           front_angle: null,
           auto_offset: true,
-          offset_step_scale: 0.2,
           auto_offset_scale: 10.0,
+          offset_step_scale: 0.75,
           min_composite: 0.0,
           render_cycle: false,
           render_best: false,
@@ -2507,6 +2507,7 @@ No job config prepared yet.</pre
 
       function createLabelFeature(feature) {
         if (!feature?.geometry?.coordinates) return null;
+        if (!feature.properties?.isBest) return null;
         const centroid = computeCentroid(feature.geometry.coordinates);
         if (!centroid) return null;
         const converted = convertCoordsIfNeeded([centroid])[0];

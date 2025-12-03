@@ -85,6 +85,8 @@
         flex-direction: column;
         gap: 18px;
         color: #0f172a;
+        max-height: calc(100vh - 40px);
+        overflow-y: auto;
       }
 
       .panel-section h1 {
@@ -291,18 +293,6 @@
         color: #fcd34d;
       }
 
-      #desktopLeaderboard .leaderboard-row {
-        background: rgba(37, 99, 235, 0.08);
-        color: #0f172a;
-      }
-
-      #desktopLeaderboard .leaderboard-row-score {
-        color: #2563eb;
-      }
-
-      #desktopLeaderboard .leaderboard-row.active {
-        background: rgba(37, 99, 235, 0.18);
-      }
 
       .leaderboard-detail {
         margin-top: 12px;
@@ -391,20 +381,59 @@
         color: #93c5fd;
       }
 
-      #desktopLeaderboard .leaderboard-detail {
-        background: #fff;
-        border-color: rgba(148, 163, 184, 0.4);
-        color: #0f172a;
+
+      .desktop-leaderboard-flyout {
+        position: absolute;
+        top: 100px;
+        right: 20px;
+        width: 320px;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-10px);
+        transition: opacity 0.25s ease, transform 0.25s ease;
+        z-index: 3;
       }
 
-      #desktopLeaderboard .leaderboard-detail .parcel-popup,
-      #desktopLeaderboard .leaderboard-detail .parcel-popup h3,
-      #desktopLeaderboard .leaderboard-detail .parcel-popup .parcel-popup-meta {
-        color: #0f172a;
+      .desktop-leaderboard-flyout.visible {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
       }
 
-      #desktopLeaderboard .leaderboard-detail .parcel-popup a {
-        color: #2563eb;
+      .desktop-leaderboard-card {
+        background: rgba(15, 23, 42, 0.92);
+        border-radius: 20px;
+        padding: 16px;
+        box-shadow: 0 20px 45px rgba(15, 23, 42, 0.45);
+        color: #f8fafc;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+      }
+
+      .desktop-leaderboard-card .leaderboard-header strong {
+        color: #f8fafc;
+      }
+
+      .desktop-leaderboard-card .leaderboard-list {
+        max-height: 220px;
+      }
+
+      .desktop-leaderboard-card .leaderboard-row {
+        background: rgba(148, 163, 184, 0.2);
+        color: #f8fafc;
+      }
+
+      .desktop-leaderboard-card .leaderboard-row.active {
+        background: rgba(248, 250, 252, 0.18);
+      }
+
+      .desktop-leaderboard-card .leaderboard-row-score {
+        color: #fcd34d;
+      }
+
+      @media (max-width: 768px) {
+        .desktop-leaderboard-flyout {
+          display: none !important;
+        }
       }
 
       .btn-secondary {
@@ -503,17 +532,6 @@
         margin-top: 4px;
       }
 
-      .log-tail-label {
-        margin-top: 10px;
-        font-size: 0.85rem;
-        font-weight: 600;
-        color: #0f172a;
-      }
-
-      .log-tail,
-      .event-log {
-        display: none;
-      }
 
       @media (max-width: 640px) {
         .control-panel {
@@ -575,6 +593,15 @@
           </button>
         </div>
       </div>
+      <div class="panel-section panel-log desktop-only">
+        <strong>Live activity</strong>
+        <div
+          id="eventStreamLog"
+          class="log-thread"
+          data-has-entries="false"
+        >
+No activity yet.</div>
+      </div>
       <div class="panel-section desktop-only" id="layerSummary">
         <div class="panel-status" id="parcelSummary">Parcels: 0</div>
         <div class="panel-status" id="placementSummary">Placements: 0</div>
@@ -584,13 +611,6 @@
         <strong style="color: #0f172a">Parcel details</strong>
         <div id="parcelInfo" class="parcel-info">
           Tap a highlighted parcel to see zoning, ownership, and score details.
-        </div>
-      </div>
-      <div class="panel-section desktop-only" id="desktopLeaderboard">
-        <strong style="color: #0f172a">Leaderboard</strong>
-        <div class="leaderboard-list" id="desktopLeaderboardList"></div>
-        <div class="leaderboard-detail" id="desktopLeaderboardDetail">
-          Placements will appear here during a crawl.
         </div>
       </div>
     </div>
@@ -621,6 +641,17 @@
           <div class="leaderboard-detail" id="leaderboardDetail">
             Placements will appear here during a crawl.
           </div>
+        </div>
+      </div>
+    </div>
+    <div id="desktopLeaderboardFlyout" class="desktop-leaderboard-flyout">
+      <div class="desktop-leaderboard-card">
+        <div class="leaderboard-header" style="margin-bottom: 8px">
+          <strong>Top parcels</strong>
+        </div>
+        <div class="leaderboard-list" id="desktopFlyoutList"></div>
+        <div class="leaderboard-detail" id="desktopFlyoutDetail">
+          Placements will appear here during a crawl.
         </div>
       </div>
     </div>
@@ -668,7 +699,6 @@
         parcelSummary: document.getElementById("parcelSummary"),
         placementSummary: document.getElementById("placementSummary"),
         shadowSummary: document.getElementById("shadowSummary"),
-        logTail: document.getElementById("logTail"),
         eventStreamLog: document.getElementById("eventStreamLog"),
         parcelInfo: document.getElementById("parcelInfo"),
         desktopDesignList: document.getElementById("desktopDesignList"),
@@ -681,12 +711,11 @@
         leaderboardList: document.getElementById("leaderboardList"),
         leaderboardDetail: document.getElementById("leaderboardDetail"),
         leaderboardContent: document.getElementById("leaderboardContent"),
-        desktopLeaderboardList: document.getElementById(
-          "desktopLeaderboardList",
+        desktopLeaderboardFlyout: document.getElementById(
+          "desktopLeaderboardFlyout",
         ),
-        desktopLeaderboardDetail: document.getElementById(
-          "desktopLeaderboardDetail",
-        ),
+        desktopFlyoutList: document.getElementById("desktopFlyoutList"),
+        desktopFlyoutDetail: document.getElementById("desktopFlyoutDetail"),
       };
 
       const appState = {
@@ -1206,21 +1235,41 @@
           `[${timestamp}] ${message}`,
           payload || "",
         );
+        let payloadText = "";
+        if (payload != null) {
+          if (typeof payload === "string") {
+            payloadText = `\n${payload}`;
+          } else {
+            try {
+              payloadText = `\n${JSON.stringify(payload, null, 2)}`;
+            } catch (err) {
+              payloadText = "";
+            }
+          }
+        }
+        appendEventFeedEntry(`[${timestamp}] ${message}${payloadText}`);
       }
 
       function appendEventFeedEntry(entry) {
         if (!ui.eventStreamLog) return;
+        if (ui.eventStreamLog.dataset.hasEntries !== "true") {
+          ui.eventStreamLog.textContent = "";
+          ui.eventStreamLog.dataset.hasEntries = "true";
+        }
         appState.eventFeed.push(entry);
         if (appState.eventFeed.length > EVENT_LOG_LIMIT) {
           appState.eventFeed.shift();
         }
         ui.eventStreamLog.textContent = appState.eventFeed.join("\n\n");
+        ui.eventStreamLog.scrollTop = ui.eventStreamLog.scrollHeight;
       }
 
-      function resetEventFeed() {
+      function resetEventFeed(message) {
         appState.eventFeed = [];
         if (ui.eventStreamLog) {
-          ui.eventStreamLog.textContent = "No events yet.";
+          ui.eventStreamLog.dataset.hasEntries = "false";
+          ui.eventStreamLog.textContent =
+            message || "Activity will stream here.";
         }
       }
 
@@ -1869,13 +1918,13 @@
       }
 
       function renderLeaderboard() {
-        const lists = [ui.leaderboardList, ui.desktopLeaderboardList].filter(
-          Boolean,
-        );
+        const lists = [ui.leaderboardList, ui.desktopFlyoutList].filter(Boolean);
         const detailTargets = [
           ui.leaderboardDetail,
-          ui.desktopLeaderboardDetail,
+          ui.desktopFlyoutDetail,
         ].filter(Boolean);
+        const shouldShow =
+          appState.leaderboardEntries.length > 0 || Boolean(appState.job);
         lists.forEach((list) => (list.innerHTML = ""));
         if (!appState.leaderboardEntries.length) {
           detailTargets.forEach((target) => {
@@ -1883,6 +1932,7 @@
               target.textContent = "Placements will appear here during a crawl.";
             }
           });
+          setDesktopLeaderboardVisibility(shouldShow);
           return;
         }
         appState.leaderboardEntries.forEach((entry) => {
@@ -1925,12 +1975,13 @@
             showLeaderboardDetail(selected);
           }
         }
+        setDesktopLeaderboardVisibility(shouldShow);
       }
 
       function showLeaderboardDetail(entry) {
         const targets = [
           ui.leaderboardDetail,
-          ui.desktopLeaderboardDetail,
+          ui.desktopFlyoutDetail,
         ].filter(Boolean);
         targets.forEach((target) => {
           target.innerHTML = formatParcelDetailHtml(entry.detail);
@@ -1942,6 +1993,11 @@
         appState.leaderboardOpen = !appState.leaderboardOpen;
         ui.leaderboardTray.classList.toggle("collapsed", !appState.leaderboardOpen);
         ui.leaderboardToggle.textContent = appState.leaderboardOpen ? "Hide" : "View";
+      }
+
+      function setDesktopLeaderboardVisibility(active) {
+        if (!ui.desktopLeaderboardFlyout) return;
+        ui.desktopLeaderboardFlyout.classList.toggle("visible", Boolean(active));
       }
 
       function ingestParcelDataset(dataset) {
@@ -2151,7 +2207,7 @@
         setControlsDisabled(true);
         updateJobSource(EMPTY_GEOJSON);
         clearOverlayData();
-        resetEventFeed();
+        resetEventFeed("Awaiting crawler activity...");
         updateJobMeta("");
         updateJobStatus("Preparing job...");
         let address;
@@ -2224,6 +2280,7 @@
           scheduleJobPolling();
           startEventStream(appState.job.id);
           requestOverlayRefresh(2500);
+          setDesktopLeaderboardVisibility(true);
         } catch (err) {
           console.error(err);
           updateJobStatus(`Failed to start job: ${err.message}`, "error");
@@ -3046,8 +3103,8 @@
       }
 
       function updateLogTail(text) {
-        if (!ui.logTail) return;
-        ui.logTail.textContent = text || "No log output yet.";
+        if (!text) return;
+        appendEventFeedEntry(`[log] ${text}`);
       }
 
       function clearOverlayData() {
@@ -3370,7 +3427,7 @@
         updateJobSource(EMPTY_GEOJSON);
         updateLogTail("");
         clearOverlayData();
-        resetEventFeed();
+        resetEventFeed("No activity yet.");
         stopEventStream();
       }
 
@@ -3500,7 +3557,9 @@
       loadDesigns();
       updateJobStatus("Select a design, then click the map.");
       resetParcelInfoPanel();
+      resetEventFeed("No activity yet.");
       renderLeaderboard();
+      setDesktopLeaderboardVisibility(false);
     </script>
   </body>
 </html>
@@ -3509,6 +3568,26 @@
         border: 1px solid rgba(148, 163, 184, 0.35);
         border-radius: 18px;
         padding: 16px 18px 18px;
+      }
+
+      .panel-section.panel-log {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .log-thread {
+        flex: 1;
+        background: #0f172a;
+        color: #f8fafc;
+        border-radius: 14px;
+        padding: 12px;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.8rem;
+        line-height: 1.4;
+        overflow-y: auto;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        white-space: pre-wrap;
       }
       .visually-hidden {
         position: absolute;

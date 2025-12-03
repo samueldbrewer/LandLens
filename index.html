@@ -206,6 +206,22 @@
         color: #cbd5f5;
       }
 
+      .parcel-info {
+        background: #f8fafc;
+        border: 1px solid rgba(148, 163, 184, 0.5);
+        border-radius: 8px;
+        padding: 10px;
+        font-size: 0.85rem;
+        color: #0f172a;
+        max-height: 220px;
+        overflow-y: auto;
+      }
+
+      .parcel-info .label {
+        font-weight: 600;
+        color: #475569;
+      }
+
       .job-status {
         font-weight: 600;
         color: #0f172a;
@@ -333,6 +349,12 @@ Select a design to preview shrink-wrap metadata.</pre
         <div class="panel-status" id="placementSummary">Placements: 0</div>
         <div class="panel-status" id="shadowSummary">Shadows: 0</div>
       </div>
+      <div class="panel-section" id="parcelInfoSection">
+        <strong style="color: #0f172a">Parcel details</strong>
+        <div id="parcelInfo" class="parcel-info">
+          Tap a highlighted parcel to see zoning, ownership, and score details.
+        </div>
+      </div>
       <div class="panel-section desktop-only">
         <strong style="color: #0f172a">Backend log (latest)</strong>
         <pre id="logTail" class="log-tail">No log output yet.</pre>
@@ -391,12 +413,14 @@ Select a design to preview shrink-wrap metadata.</pre
         logTail: document.getElementById("logTail"),
         designPreview: document.getElementById("designPreview"),
         eventStreamLog: document.getElementById("eventStreamLog"),
+        parcelInfo: document.getElementById("parcelInfo"),
       };
 
       const appState = {
         designs: [],
         selectedDesign: null,
         job: null,
+        selectedParcelId: null,
         pollTimers: { status: null, geo: null },
         abortControllers: new Set(),
         jobMarker: null,
@@ -419,6 +443,8 @@ Select a design to preview shrink-wrap metadata.</pre
           pending: false,
         },
         overlayRefreshPending: false,
+        parcelLayerHandlersBound: false,
+        parcelArtifactIndex: {},
         overlayStore: {
           parcels: new Map(),
           placements: new Map(),
@@ -426,6 +452,7 @@ Select a design to preview shrink-wrap metadata.</pre
           labels: new Map(),
           best: new Map(),
           nextPlacementIndex: new Map(),
+          parcelDetails: new Map(),
         },
         eventFeed: [],
       };
@@ -766,6 +793,16 @@ Select a design to preview shrink-wrap metadata.</pre
               "line-dasharray": [2, 2],
             },
           });
+          if (!appState.parcelLayerHandlersBound) {
+            map.on("click", PARCEL_BOUNDARY_LAYER_ID, handleParcelFeatureClick);
+            map.on("mouseenter", PARCEL_BOUNDARY_LAYER_ID, () => {
+              map.getCanvas().style.cursor = "pointer";
+            });
+            map.on("mouseleave", PARCEL_BOUNDARY_LAYER_ID, () => {
+              map.getCanvas().style.cursor = "";
+            });
+            appState.parcelLayerHandlersBound = true;
+          }
         }
         if (!map.getSource(SHADOW_SOURCE_ID)) {
           map.addSource(SHADOW_SOURCE_ID, {
@@ -1058,6 +1095,289 @@ Select a design to preview shrink-wrap metadata.</pre
           return;
         }
         await showAddressPopup(event.lngLat);
+      }
+
+      function normalizeParcelId(raw) {
+        if (!raw && raw !== 0) return null;
+        return String(raw).replace(/_/g, " ").replace(/\s+/g, " ").trim();
+      }
+
+      function getParcelDetail(parcelId) {
+        const normalized = normalizeParcelId(parcelId);
+        if (!normalized) return null;
+        return appState.overlayStore.parcelDetails.get(normalized) || null;
+      }
+
+      function ensureParcelDetail(parcelId) {
+        const normalized = normalizeParcelId(parcelId);
+        if (!normalized) return null;
+        const store = appState.overlayStore.parcelDetails;
+        if (!store.has(normalized)) {
+          store.set(normalized, {
+            parcelId: normalized,
+            parcel: null,
+            summary: null,
+            bestPlacement: null,
+            latestPlacement: null,
+            lastUpdated: Date.now(),
+          });
+        }
+        return store.get(normalized);
+      }
+
+      function resetParcelInfoPanel(message) {
+        if (!ui.parcelInfo) return;
+        ui.parcelInfo.textContent =
+          message ||
+          "Tap a highlighted parcel to see zoning, ownership, and score details.";
+      }
+
+      function formatOwner(parcel) {
+        const owners = [parcel?.OWNERNME1, parcel?.OWNERNME2].filter(Boolean);
+        return owners.length ? owners.join(" / ") : null;
+      }
+
+      function formatOverlays(parcel) {
+        if (Array.isArray(parcel?.overlay_names) && parcel.overlay_names.length) {
+          return parcel.overlay_names.join(", ");
+        }
+        if (Array.isArray(parcel?.overlays) && parcel.overlays.length) {
+          return parcel.overlays.join(", ");
+        }
+        return null;
+      }
+
+      function updateParcelInfoPanel(parcelId) {
+        if (!ui.parcelInfo) return;
+        if (!parcelId) {
+          resetParcelInfoPanel();
+          return;
+        }
+        const detail = getParcelDetail(parcelId);
+        if (!detail) {
+          ui.parcelInfo.textContent = "Looking up parcel details…";
+          return;
+        }
+        const parcel = detail.parcel || {};
+        const summary = detail.summary || {};
+        const lines = [];
+        const address =
+          parcel.SITEADDRESS ||
+          parcel.official_address ||
+          parcel.county_address ||
+          summary.address ||
+          "";
+        if (address) {
+          lines.push(address);
+        }
+        lines.push(`Parcel ID: ${parcel.LOWPARCELID || parcel.parcel_id || parcelId}`);
+        const owner = formatOwner(parcel);
+        if (owner) lines.push(`Owner: ${owner}`);
+        if (parcel.official_zoning) {
+          lines.push(`Zoning: ${parcel.official_zoning}`);
+        }
+        if (
+          parcel.zoning_classification &&
+          parcel.zoning_classification !== parcel.official_zoning
+        ) {
+          lines.push(`Classification: ${parcel.zoning_classification}`);
+        }
+        if (parcel.document?.DOC_NAME) {
+          const docDate =
+            parcel.document.formatted_record_date ||
+            (parcel.document.RECORD_DATE
+              ? new Date(parcel.document.RECORD_DATE).toLocaleDateString()
+              : "");
+          const docLine = docDate
+            ? `${parcel.document.DOC_NAME} (${docDate})`
+            : parcel.document.DOC_NAME;
+          lines.push(`Document: ${docLine}`);
+        }
+        const overlayList = formatOverlays(parcel);
+        if (overlayList) {
+          lines.push(`Overlays: ${overlayList}`);
+        }
+        if (parcel.future_land_use) {
+          lines.push(`Future land use: ${parcel.future_land_use}`);
+        }
+        if (parcel.land_lot_page) {
+          lines.push(`Land lot: ${parcel.land_lot_page}`);
+        }
+        if (parcel.tax_assessor_link) {
+          lines.push(`Tax assessor: ${parcel.tax_assessor_link}`);
+        }
+        if (parcel.council_district) {
+          lines.push(`Council district: ${parcel.council_district}`);
+        }
+        if (parcel.npu) {
+          lines.push(`NPU: ${parcel.npu}`);
+        }
+        if (parcel._area_sq_m) {
+          const acres = (Number(parcel._area_sq_m) * 0.000247105).toFixed(2);
+          lines.push(
+            `Area: ${Number(parcel._area_sq_m).toFixed(1)} m² (${acres} acres)`,
+          );
+        }
+        if (summary.viable_count != null) {
+          lines.push(`Viable placements: ${summary.viable_count}`);
+        }
+        if (summary.max_composite != null) {
+          lines.push(
+            `Best composite score: ${Number(summary.max_composite).toFixed(1)}`,
+          );
+        }
+        if (detail.bestPlacement?.rotation_deg != null) {
+          const best = detail.bestPlacement;
+          const offsetX =
+            best.offset_x_m ??
+            (Array.isArray(best.offset) ? best.offset[0] : null);
+          const offsetY =
+            best.offset_y_m ??
+            (Array.isArray(best.offset) ? best.offset[1] : null);
+          const offsetLine =
+            offsetX != null && offsetY != null
+              ? ` | Offset (${offsetX}, ${offsetY})`
+              : "";
+          lines.push(
+            `Best orientation: ${best.rotation_deg}°${offsetLine}`,
+          );
+        }
+        if (!lines.length) {
+          ui.parcelInfo.textContent = "Parcel metadata will appear here.";
+          return;
+        }
+        ui.parcelInfo.textContent = lines.join("\n");
+      }
+
+      function ingestParcelDataset(dataset) {
+        if (!dataset) return;
+        const parcelIdCandidate =
+          dataset.summary?.parcel_id ||
+          dataset.parcel?.LOWPARCELID ||
+          dataset.parcel?.parcel_id;
+        const normalized = normalizeParcelId(parcelIdCandidate);
+        if (!normalized) return;
+        const detail = ensureParcelDetail(normalized);
+        if (!detail) return;
+        if (dataset.parcel) {
+          detail.parcel = { ...(detail.parcel || {}), ...dataset.parcel };
+        }
+        if (dataset.summary) {
+          detail.summary = { ...(detail.summary || {}), ...dataset.summary };
+        }
+        if (dataset.best) {
+          detail.bestPlacement = dataset.best;
+        }
+        detail.lastUpdated = Date.now();
+        if (appState.selectedParcelId === normalized) {
+          updateParcelInfoPanel(normalized);
+        }
+      }
+
+      function ingestParcelSummaryFromOverlayFeature(feature) {
+        if (!feature?.properties) return;
+        const parcelId =
+          feature.properties.parcelId || feature.properties.parcel_id;
+        const normalized = normalizeParcelId(parcelId);
+        if (!normalized) return;
+        const detail = ensureParcelDetail(normalized);
+        if (!detail) return;
+        const summaryPatch = {
+          parcel_id: normalized,
+        };
+        if (feature.properties.address) {
+          summaryPatch.address = feature.properties.address;
+        }
+        if (feature.properties.viable_count != null) {
+          summaryPatch.viable_count = feature.properties.viable_count;
+        }
+        if (feature.properties.max_composite != null) {
+          summaryPatch.max_composite = feature.properties.max_composite;
+        }
+        detail.summary = { ...(detail.summary || {}), ...summaryPatch };
+        detail.lastUpdated = Date.now();
+        if (appState.selectedParcelId === normalized) {
+          updateParcelInfoPanel(normalized);
+        }
+      }
+
+      function updateParcelPlacementDetail(parcelId, placement, isBest) {
+        const normalized = normalizeParcelId(parcelId);
+        if (!normalized || !placement) return;
+        const detail = ensureParcelDetail(normalized);
+        if (!detail) return;
+        const composite = getPlacementCompositeScore(placement);
+        const placementInfo = {
+          index:
+            placement.index ??
+            placement.sequence ??
+            placement.position ??
+            null,
+          score: composite,
+          rotation_deg: placement.rotation_deg,
+          offset_x_m: placement.offset_x_m,
+          offset_y_m: placement.offset_y_m,
+          offset: placement.offset,
+        };
+        detail.latestPlacement = placementInfo;
+        if (isBest) {
+          detail.bestPlacement = placementInfo;
+          detail.summary = detail.summary || { parcel_id: normalized };
+          if (composite != null) {
+            detail.summary.max_composite = composite;
+          }
+        }
+        detail.lastUpdated = Date.now();
+        if (appState.selectedParcelId === normalized) {
+          updateParcelInfoPanel(normalized);
+        }
+      }
+
+      async function ensureParcelDetailLoaded(parcelId) {
+        const normalized = normalizeParcelId(parcelId);
+        if (!normalized) return null;
+        const existing = getParcelDetail(normalized);
+        if (existing?.parcel) {
+          return existing;
+        }
+        const url = appState.parcelArtifactIndex[normalized];
+        if (!url) return existing;
+        try {
+          const data = await fetchExternalJSON(url, { cache: "no-store" });
+          if (data) {
+            ingestParcelDataset(data);
+          }
+        } catch (err) {
+          logMessage(
+            "Parcel artifact fetch failed",
+            { parcelId: normalized, error: err.message },
+            "error",
+          );
+        }
+        return getParcelDetail(normalized);
+      }
+
+      async function handleParcelFeatureClick(event) {
+        if (suppressNextClick) {
+          suppressNextClick = false;
+          return;
+        }
+        const feature = event?.features && event.features[0];
+        if (!feature?.properties) return;
+        suppressNextClick = true;
+        setTimeout(() => {
+          suppressNextClick = false;
+        }, 0);
+        const parcelId =
+          feature.properties.parcelId ||
+          feature.properties.parcel_id ||
+          feature.properties.LOWPARCELID;
+        const normalized = normalizeParcelId(parcelId);
+        if (!normalized) return;
+        appState.selectedParcelId = normalized;
+        updateParcelInfoPanel(normalized);
+        await ensureParcelDetailLoaded(normalized);
+        updateParcelInfoPanel(normalized);
       }
 
       function canStartJob() {
@@ -1360,6 +1680,16 @@ Select a design to preview shrink-wrap metadata.</pre
           zoning: parcelData.official_zoning || parcelData.zoning_classification,
         };
         recordCrawlerEventSummary(event, summary);
+        ingestParcelDataset({
+          parcel: parcelData,
+          summary: {
+            parcel_id: parcelId,
+            address:
+              parcelData.SITEADDRESS ||
+              parcelData.official_address ||
+              parcelData.county_address,
+          },
+        });
       }
 
       function handlePlacementScoredEvent(event) {
@@ -1406,6 +1736,7 @@ Select a design to preview shrink-wrap metadata.</pre
           worker: placement.worker_id,
         };
         recordCrawlerEventSummary(event, summary);
+        updateParcelPlacementDetail(parcelKey, placement, false);
       }
 
       function handleBestUpdatedEvent(event) {
@@ -1431,6 +1762,7 @@ Select a design to preview shrink-wrap metadata.</pre
           offset: [placement.offset_x_m, placement.offset_y_m],
         };
         recordCrawlerEventSummary(event, summary);
+        updateParcelPlacementDetail(parcelId, placement, true);
       }
 
       function isTerminalStatus(status) {
@@ -1523,6 +1855,19 @@ Select a design to preview shrink-wrap metadata.</pre
             `/jobs/${encodeURIComponent(jobId)}/artifacts`,
           );
           const parcels = manifest?.artifacts?.parcels || [];
+          const artifactIndex = { ...appState.parcelArtifactIndex };
+          parcels.forEach((entry) => {
+            const normalized = normalizeParcelId(
+              entry?.parcel_id || entry?.parcelId || entry?.LOWPARCELID,
+            );
+            const placementsUrl = normalizeArtifactUrl(
+              entry?.placements_json_url,
+            );
+            if (normalized && placementsUrl) {
+              artifactIndex[normalized] = placementsUrl;
+            }
+          });
+          appState.parcelArtifactIndex = artifactIndex;
           if (!parcels.length) {
             return;
           }
@@ -1581,9 +1926,9 @@ Select a design to preview shrink-wrap metadata.</pre
             }),
           );
 
-          const overlay = buildOverlayFromPlacements(
-            Object.values(cache.data).filter(Boolean),
-          );
+          const placementDatasets = Object.values(cache.data).filter(Boolean);
+          placementDatasets.forEach((dataset) => ingestParcelDataset(dataset));
+          const overlay = buildOverlayFromPlacements(placementDatasets);
           setOverlayStoreFromCollections(overlay);
         } catch (err) {
           const message = err?.message || "";
@@ -1848,6 +2193,7 @@ Select a design to preview shrink-wrap metadata.</pre
         store.labels.clear();
         store.best.clear();
         store.nextPlacementIndex.clear();
+        store.parcelDetails.clear();
       }
 
       function renderOverlayFromStore() {
@@ -1896,6 +2242,7 @@ Select a design to preview shrink-wrap metadata.</pre
             feature.properties?.id ||
             `parcel-${index}`;
           store.parcels.set(key, feature);
+          ingestParcelSummaryFromOverlayFeature(feature);
         });
         shadowFeatures.forEach((feature, index) => {
           const key =
@@ -1997,6 +2344,9 @@ Select a design to preview shrink-wrap metadata.</pre
         appState.overlayCache.data = {};
         appState.overlayCache.index = 0;
         appState.overlayCache.jobId = appState.job?.id || null;
+        appState.parcelArtifactIndex = {};
+        appState.selectedParcelId = null;
+        resetParcelInfoPanel();
       }
 
       function normalizePolygonGeometry(input) {
@@ -2399,6 +2749,7 @@ Select a design to preview shrink-wrap metadata.</pre
       initMap();
       loadDesigns();
       updateJobStatus("Select a design, then click the map.");
+      resetParcelInfoPanel();
     </script>
   </body>
 </html>

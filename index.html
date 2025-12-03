@@ -367,6 +367,7 @@ Select a design to preview shrink-wrap metadata.</pre
       const JOB_GEO_POLL_MS = 4000;
       const JOB_ARTIFACT_POLL_MS = 8000;
       const EVENT_POLL_INTERVAL_MS = 1500;
+      const EVENT_POLL_MAX_BYTES = 200000;
       const EVENT_LOG_LIMIT = 200;
       const EMPTY_GEOJSON = { type: "FeatureCollection", features: [] };
 
@@ -416,7 +417,7 @@ Select a design to preview shrink-wrap metadata.</pre
           jobId: null,
           timer: null,
           cursor: 0,
-          buffer: "",
+          pending: false,
         },
         overlayRefreshPending: false,
         overlayStore: {
@@ -1218,7 +1219,7 @@ Select a design to preview shrink-wrap metadata.</pre
           jobId: null,
           timer: null,
           cursor: 0,
-          buffer: "",
+          pending: false,
         };
       }
 
@@ -1229,68 +1230,67 @@ Select a design to preview shrink-wrap metadata.</pre
           jobId,
           timer: null,
           cursor: 0,
-          buffer: "",
+          pending: false,
         };
         appState.eventStreamState = state;
-        pollEventFile(jobId);
-        state.timer = setInterval(() => pollEventFile(jobId), EVENT_POLL_INTERVAL_MS);
+        pollCrawlerEvents(jobId);
+        state.timer = setInterval(
+          () => pollCrawlerEvents(jobId),
+          EVENT_POLL_INTERVAL_MS,
+        );
       }
 
-      function getEventStreamUrls(jobId) {
-        const encoded = encodeURIComponent(jobId);
-        return [
-          `${API_BASE}/jobs/${encoded}/files/outputs/events.ndjson`,
-          `${API_BASE}/jobs/${encoded}/files/events.ndjson`,
-        ];
-      }
-
-      async function pollEventFile(jobId) {
+      async function pollCrawlerEvents(jobId) {
         const state = appState.eventStreamState;
-        if (!state || state.jobId !== jobId) return;
-        const urls = getEventStreamUrls(jobId);
-        let text = null;
-        for (const url of urls) {
-          try {
-            const response = await fetch(url, { cache: "no-store" });
-            if (!response.ok) {
-              if (response.status === 404) {
-                continue;
-              }
-              if (response.status === 304) {
-                return;
-              }
-              throw new Error(`Event poll failed (${response.status})`);
-            }
-            text = await response.text();
-            break;
-          } catch (err) {
-            logMessage("Event poll fetch error", { error: err.message }, "error");
+        if (!state || state.jobId !== jobId || state.pending) return;
+        state.pending = true;
+        try {
+          const params = new URLSearchParams({
+            cursor: String(state.cursor || 0),
+            max_bytes: String(EVENT_POLL_MAX_BYTES),
+          });
+          const payload = await fetchJSON(
+            `/jobs/${encodeURIComponent(jobId)}/events?${params.toString()}`,
+          );
+          if (typeof payload?.cursor === "number") {
+            state.cursor = payload.cursor;
+          }
+          if (Array.isArray(payload?.events)) {
+            payload.events.forEach((event) => handleCrawlerEvent(event));
+          }
+          if (payload?.has_more) {
+            state.pending = false;
+            await pollCrawlerEvents(jobId);
             return;
           }
+        } catch (err) {
+          const message = err?.message || "";
+          if (
+            message.includes("Events not available yet") ||
+            message.includes("not found")
+          ) {
+            // waiting for worker to create the log file; ignore quietly
+          } else {
+            logMessage("Event poll error", { error: message }, "error");
+          }
+        } finally {
+          const latestState = appState.eventStreamState;
+          if (latestState && latestState.jobId === jobId) {
+            latestState.pending = false;
+          }
         }
-        if (text == null) return;
-        if (!text.length) return;
-        let newText;
-        if (state.cursor === 0) {
-          newText = text;
-        } else if (text.length > state.cursor) {
-          newText = text.slice(state.cursor);
-        } else {
-          return;
-        }
-        state.cursor = text.length;
-        if (!newText) return;
-        const combined = (state.buffer || "") + newText;
-        const lines = combined.split("\n");
-        state.buffer = lines.pop() || "";
-        lines.forEach(handleCrawlerEvent);
       }
 
       function handleCrawlerEvent(line) {
-        const trimmed = line.trim();
-        if (!trimmed) return;
+        if (!line) return;
         try {
-          const raw = JSON.parse(trimmed);
+          const raw =
+            typeof line === "string"
+              ? JSON.parse(line.trim())
+              : typeof line === "object"
+                ? line
+                : null;
+          if (!raw) return;
           const eventType = raw.type || raw.event || raw.kind;
           const payload = raw.payload || raw.data || raw;
           const event = {

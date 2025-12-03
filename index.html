@@ -73,29 +73,29 @@
 
       .control-panel {
         position: absolute;
-        top: 12px;
-        left: 12px;
-        width: 420px;
-        background: rgba(255, 255, 255, 0.96);
-        border-radius: 10px;
-        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.15);
-        padding: 14px 16px 18px;
+        top: 16px;
+        left: 16px;
+        width: 380px;
+        background: rgba(15, 23, 42, 0.94);
+        border-radius: 18px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+        padding: 18px 20px 22px;
         z-index: 2;
         display: flex;
         flex-direction: column;
-        gap: 12px;
-        border: 1px solid rgba(148, 163, 184, 0.35);
+        gap: 16px;
+        color: #f8fafc;
       }
 
       .panel-section h1 {
-        font-size: 1.2rem;
+        font-size: 1.4rem;
         margin: 0;
-        color: #0f172a;
+        color: #f8fafc;
       }
 
       .panel-section p {
         margin: 4px 0 0;
-        color: #475569;
+        color: rgba(241, 245, 249, 0.7);
         font-size: 0.9rem;
         line-height: 1.4;
       }
@@ -103,7 +103,7 @@
       .panel-section label {
         font-size: 0.9rem;
         font-weight: 600;
-        color: #0f172a;
+        color: #e2e8f0;
         display: flex;
         flex-direction: column;
         gap: 6px;
@@ -114,7 +114,7 @@
         font-family: inherit;
         font-size: 0.95rem;
         border-radius: 8px;
-        border: 1px solid #cbd5f5;
+        border: 1px solid rgba(148, 163, 184, 0.45);
         padding: 8px 10px;
       }
 
@@ -124,7 +124,7 @@
 
       .panel-section button {
         border: none;
-        background: #2563eb;
+        background: linear-gradient(135deg, #2563eb, #7c3aed);
         color: #fff;
         font-weight: 600;
         cursor: pointer;
@@ -132,7 +132,7 @@
       }
 
       .panel-section button:hover {
-        background: #1e4fd6;
+        background: linear-gradient(135deg, #1d4ed8, #6d28d9);
       }
 
       .panel-section button:disabled,
@@ -341,7 +341,7 @@
 
       .panel-status {
         font-size: 0.85rem;
-        color: #475569;
+        color: rgba(226, 232, 240, 0.85);
       }
 
       .panel-status.error {
@@ -415,12 +415,12 @@
 
       .job-status {
         font-weight: 600;
-        color: #0f172a;
+        color: #f8fafc;
       }
 
       .job-meta {
         font-size: 0.85rem;
-        color: #475569;
+        color: rgba(226, 232, 240, 0.8);
         margin-top: 4px;
       }
 
@@ -431,30 +431,9 @@
         color: #0f172a;
       }
 
-      .log-tail {
-        background: #0f172a;
-        color: #e2e8f0;
-        border-radius: 6px;
-        padding: 8px;
-        font-size: 0.78rem;
-        line-height: 1.35;
-        max-height: 150px;
-        overflow-y: auto;
-        margin-top: 4px;
-        white-space: pre-wrap;
-      }
+      .log-tail,
       .event-log {
-        background: #020617;
-        color: #c7d2fe;
-        border-radius: 6px;
-        padding: 8px;
-        font-size: 0.75rem;
-        line-height: 1.35;
-        max-height: 180px;
-        overflow-y: auto;
-        margin-top: 4px;
-        white-space: pre-wrap;
-        border: 1px solid rgba(99, 102, 241, 0.4);
+        display: none;
       }
 
       @media (max-width: 640px) {
@@ -504,7 +483,7 @@
         <div id="designStatus" class="panel-status"></div>
       </div>
       <div class="panel-section" id="designPreviewSection">
-        <strong style="color: #0f172a">Design preview</strong>
+        <strong style="color: #f8fafc">Design preview</strong>
         <canvas
           id="designPreviewCanvas"
           width="320"
@@ -549,7 +528,7 @@ Select a design to preview shrink-wrap metadata.</pre
         </div>
       </div>
       <div class="panel-section">
-        <strong style="color: #0f172a">Job config</strong>
+        <strong style="color: #f8fafc">Job config</strong>
         <pre
           id="configPreview"
           style="
@@ -570,21 +549,17 @@ No job config prepared yet.</pre
         <div class="panel-status" id="shadowSummary">Shadows: 0</div>
       </div>
       <div class="panel-section" id="parcelInfoSection">
-        <strong style="color: #0f172a">Parcel details</strong>
+        <strong style="color: #f8fafc">Parcel details</strong>
         <div id="parcelInfo" class="parcel-info">
           Tap a highlighted parcel to see zoning, ownership, and score details.
         </div>
       </div>
-      <div class="panel-section desktop-only">
-        <strong style="color: #0f172a">Backend log (latest)</strong>
-        <pre id="logTail" class="log-tail">No log output yet.</pre>
-      </div>
-      <div class="panel-section desktop-only">
-        <strong style="color: #0f172a">Live event stream</strong>
-        <p class="panel-status" style="margin: 4px 0 0">
-          Raw parcel / placement events as they arrive from the crawler.
-        </p>
-        <pre id="eventStreamLog" class="event-log">No events yet.</pre>
+      <div class="panel-section desktop-only" id="desktopLeaderboard">
+        <strong style="color: #f8fafc">Leaderboard</strong>
+        <div class="leaderboard-list" id="desktopLeaderboardList"></div>
+        <div class="leaderboard-detail" id="desktopLeaderboardDetail">
+          Placements will appear here during a crawl.
+        </div>
       </div>
     </div>
     <div class="mobile-only">
@@ -676,6 +651,12 @@ No job config prepared yet.</pre
         leaderboardList: document.getElementById("leaderboardList"),
         leaderboardDetail: document.getElementById("leaderboardDetail"),
         leaderboardContent: document.getElementById("leaderboardContent"),
+        desktopLeaderboardList: document.getElementById(
+          "desktopLeaderboardList",
+        ),
+        desktopLeaderboardDetail: document.getElementById(
+          "desktopLeaderboardDetail",
+        ),
       };
 
       const appState = {
@@ -1838,19 +1819,28 @@ No job config prepared yet.</pre
       }
 
       function renderLeaderboard() {
-        if (!ui.leaderboardList || !ui.leaderboardDetail) return;
-        ui.leaderboardList.innerHTML = "";
+        const lists = [ui.leaderboardList, ui.desktopLeaderboardList].filter(
+          Boolean,
+        );
+        const detailTargets = [
+          ui.leaderboardDetail,
+          ui.desktopLeaderboardDetail,
+        ].filter(Boolean);
+        lists.forEach((list) => (list.innerHTML = ""));
         if (!appState.leaderboardEntries.length) {
-          ui.leaderboardDetail.textContent =
-            "Placements will appear here during a crawl.";
+          detailTargets.forEach((target) => {
+            if (target) {
+              target.textContent = "Placements will appear here during a crawl.";
+            }
+          });
           return;
         }
         appState.leaderboardEntries.forEach((entry) => {
-          const row = document.createElement("button");
-          row.type = "button";
-          row.className = "leaderboard-row";
+          const rowTemplate = document.createElement("button");
+          rowTemplate.type = "button";
+          rowTemplate.className = "leaderboard-row";
           if (appState.leaderboardSelectedId === entry.parcelId) {
-            row.classList.add("active");
+            rowTemplate.classList.add("active");
           }
           const title = document.createElement("div");
           title.textContent =
@@ -1858,20 +1848,24 @@ No job config prepared yet.</pre
           const score = document.createElement("div");
           score.className = "leaderboard-row-score";
           score.textContent = entry.score.toFixed(1);
-          row.appendChild(title);
-          row.appendChild(score);
-          row.addEventListener("click", () => {
-            appState.leaderboardSelectedId = entry.parcelId;
-            renderLeaderboard();
-            showLeaderboardDetail(entry);
-            appState.selectedParcelId = entry.parcelId;
-            updateSelectedParcelHighlight();
-            ensureParcelDetailLoaded(entry.parcelId).then(() => {
-              const detail = getParcelDetail(entry.parcelId);
-              showParcelTooltip(entry.parcelId, detail);
+          rowTemplate.appendChild(title);
+          rowTemplate.appendChild(score);
+          lists.forEach((list) => {
+            if (!list) return;
+            const row = rowTemplate.cloneNode(true);
+            row.addEventListener("click", () => {
+              appState.leaderboardSelectedId = entry.parcelId;
+              renderLeaderboard();
+              showLeaderboardDetail(entry);
+              appState.selectedParcelId = entry.parcelId;
+              updateSelectedParcelHighlight();
+              ensureParcelDetailLoaded(entry.parcelId).then(() => {
+                const detail = getParcelDetail(entry.parcelId);
+                showParcelTooltip(entry.parcelId, detail);
+              });
             });
+            list.appendChild(row);
           });
-          ui.leaderboardList.appendChild(row);
         });
         if (appState.leaderboardSelectedId) {
           const selected = appState.leaderboardEntries.find(
@@ -1884,8 +1878,13 @@ No job config prepared yet.</pre
       }
 
       function showLeaderboardDetail(entry) {
-        if (!ui.leaderboardDetail) return;
-        ui.leaderboardDetail.innerHTML = formatParcelDetailHtml(entry.detail);
+        const targets = [
+          ui.leaderboardDetail,
+          ui.desktopLeaderboardDetail,
+        ].filter(Boolean);
+        targets.forEach((target) => {
+          target.innerHTML = formatParcelDetailHtml(entry.detail);
+        });
       }
 
       function toggleLeaderboardTray() {
@@ -3457,3 +3456,9 @@ No job config prepared yet.</pre
     </script>
   </body>
 </html>
+      .panel-section {
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 14px;
+        padding: 14px;
+      }

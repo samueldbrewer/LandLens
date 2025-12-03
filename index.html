@@ -1362,6 +1362,12 @@ Select a design to preview shrink-wrap metadata.</pre
         const parcelId =
           event.parcel_id || placement.parcel_id || placement.parcelId;
         const parcelKey = parcelId ?? "__unknown__";
+        const placementIndex =
+          placement.index ??
+          placement.sequence ??
+          placement.position ??
+          placement.rank ??
+          null;
         const feature = createPlacementFeature(placement, parcelId, false);
         if (feature) {
           const nextIndex =
@@ -1373,7 +1379,9 @@ Select a design to preview shrink-wrap metadata.</pre
           const key =
             placement.id ||
             placement.placement_id ||
-            `${parcelKey}-${nextIndex}`;
+            (placementIndex != null
+              ? `${parcelKey}-idx-${placementIndex}`
+              : `${parcelKey}-${nextIndex}`);
           upsertPlacementFeature(feature, key);
         }
         const shadowFeature = createShadowFeature(placement, parcelId, false);
@@ -1387,7 +1395,7 @@ Select a design to preview shrink-wrap metadata.</pre
           score: getPlacementCompositeScore(placement),
           rotation_deg: placement.rotation_deg,
           offset: [placement.offset_x_m, placement.offset_y_m],
-          sequence: placement.sequence,
+          sequence: placement.sequence ?? placement.index,
           worker: placement.worker_id,
         };
         recordCrawlerEventSummary(event, summary);
@@ -1844,6 +1852,7 @@ Select a design to preview shrink-wrap metadata.</pre
             `shadow-${index}`;
           store.shadows.set(key, feature);
         });
+        const placementCounts = new Map();
         placementFeatures.forEach((feature, index) => {
           const key =
             feature.properties?.placementKey ||
@@ -1855,11 +1864,18 @@ Select a design to preview shrink-wrap metadata.</pre
             store.best.set(parcelId, feature);
           } else {
             store.placements.set(key, feature);
+            const parcelIdForCount =
+              feature.properties?.parcelId || feature.properties?.id || key;
+            const current = placementCounts.get(parcelIdForCount) || 0;
+            placementCounts.set(parcelIdForCount, current + 1);
           }
           const label = createLabelFeature(feature);
           if (label) {
             store.labels.set(`${key}-label`, label);
           }
+        });
+        placementCounts.forEach((count, parcelId) => {
+          store.nextPlacementIndex.set(parcelId, count);
         });
         renderOverlayFromStore();
       }
@@ -1979,6 +1995,12 @@ Select a design to preview shrink-wrap metadata.</pre
       }
 
       function createPlacementFeature(placement, parcelId, isBest) {
+        const placementIndex =
+          placement.index ??
+          placement.sequence ??
+          placement.position ??
+          placement.rank ??
+          null;
         const geometry =
           normalizePolygonGeometry(placement.footprint_geojson) ||
           normalizePolygonGeometry(
@@ -1997,6 +2019,7 @@ Select a design to preview shrink-wrap metadata.</pre
             score: composite != null ? Number(composite).toFixed(2) : "n/a",
             rawScore: composite,
             isBest: Boolean(isBest),
+            index: placementIndex,
           },
         };
       }

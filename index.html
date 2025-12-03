@@ -2617,7 +2617,16 @@ No job config prepared yet.</pre
               bestScore = composite;
             }
           });
-          placements.forEach((placement) => {
+          placements.forEach((placement, idx) => {
+            const normalizedPlacement = { ...placement };
+            if (
+              normalizedPlacement.index == null &&
+              normalizedPlacement.sequence == null &&
+              normalizedPlacement.position == null &&
+              normalizedPlacement.rank == null
+            ) {
+              normalizedPlacement.index = idx;
+            }
             const composite = getPlacementCompositeScore(placement);
             const numericScore = composite;
             const isBest =
@@ -2625,7 +2634,7 @@ No job config prepared yet.</pre
                 ? numericScore === bestScore
                 : false;
             const placementFeature = createPlacementFeature(
-              placement,
+              normalizedPlacement,
               parcelId,
               isBest,
             );

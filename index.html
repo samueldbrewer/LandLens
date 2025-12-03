@@ -67,6 +67,10 @@
         display: none !important;
       }
 
+      body.mobile-mode .control-panel {
+        display: none !important;
+      }
+
       .control-panel {
         position: absolute;
         top: 12px;
@@ -135,6 +139,183 @@
       .panel-section select:disabled {
         opacity: 0.6;
         cursor: not-allowed;
+      }
+
+      .mobile-bar {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        right: 12px;
+        z-index: 3;
+      }
+
+      .mobile-bar button {
+        width: 100%;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: none;
+        background: rgba(15, 23, 42, 0.85);
+        color: #f8fafc;
+        font-size: 1rem;
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.25);
+      }
+
+      .mobile-design-menu {
+        position: absolute;
+        top: 64px;
+        left: 12px;
+        right: 12px;
+        background: rgba(255, 255, 255, 0.98);
+        border-radius: 14px;
+        box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+        max-height: 60vh;
+        overflow-y: auto;
+        padding: 10px;
+        z-index: 3;
+      }
+
+      .mobile-design-menu.hidden {
+        display: none;
+      }
+
+      .mobile-design-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background: #ffffff;
+        margin-bottom: 8px;
+        width: 100%;
+        text-align: left;
+      }
+
+      .mobile-design-row:last-child {
+        margin-bottom: 0;
+      }
+
+      .design-thumb {
+        width: 72px;
+        height: 72px;
+        border-radius: 10px;
+        border: 1px solid rgba(15, 23, 42, 0.1);
+        background: #f8fafc;
+      }
+
+      .mobile-design-info {
+        flex: 1;
+      }
+
+      .mobile-design-info strong {
+        display: block;
+        color: #0f172a;
+      }
+
+      .mobile-design-info span {
+        color: #475569;
+        font-size: 0.85rem;
+      }
+
+      .mobile-leaderboard {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 3;
+        transition: transform 0.25s ease, height 0.25s ease;
+      }
+
+      .leaderboard-shell {
+        margin: 0 auto;
+        width: calc(100% - 24px);
+        max-width: 560px;
+        background: rgba(15, 23, 42, 0.92);
+        border-radius: 18px 18px 0 0;
+        color: #e2e8f0;
+        box-shadow: 0 -12px 30px rgba(15, 23, 42, 0.35);
+        padding: 12px 16px 16px;
+      }
+
+      .leaderboard-handle {
+        width: 46px;
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(226, 232, 240, 0.4);
+        margin: 0 auto 10px;
+      }
+
+      .leaderboard-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .leaderboard-list {
+        margin: 12px 0 0;
+        max-height: 240px;
+        overflow-y: auto;
+      }
+
+      .leaderboard-row {
+        width: 100%;
+        padding: 10px 12px;
+        border: none;
+        border-radius: 10px;
+        background: rgba(148, 163, 184, 0.15);
+        color: inherit;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      .leaderboard-row.active {
+        background: rgba(248, 250, 252, 0.12);
+      }
+
+      .leaderboard-row-score {
+        font-weight: 700;
+        color: #fcd34d;
+      }
+
+      .leaderboard-detail {
+        margin-top: 12px;
+        background: rgba(15, 23, 42, 0.8);
+        border-radius: 12px;
+        padding: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        max-height: 220px;
+        overflow-y: auto;
+      }
+
+      .mobile-leaderboard.collapsed .leaderboard-content {
+        display: none;
+      }
+
+      .parcel-popup {
+        font-size: 0.85rem;
+        color: #0f172a;
+        min-width: 220px;
+      }
+
+      .parcel-popup h3 {
+        margin: 0 0 6px;
+        font-size: 1rem;
+        color: #0f172a;
+      }
+
+      .parcel-popup .parcel-popup-meta {
+        margin: 2px 0;
+      }
+
+      .parcel-popup a {
+        color: #2563eb;
+        text-decoration: none;
       }
 
       .btn-secondary {
@@ -396,12 +577,40 @@ No job config prepared yet.</pre
         <pre id="eventStreamLog" class="event-log">No events yet.</pre>
       </div>
     </div>
+    <div class="mobile-only">
+      <div class="mobile-bar">
+        <button id="mobileDesignToggle" type="button">
+          <span>Select shrink-wrap</span>
+          <strong id="mobileDesignCurrent">Choose…</strong>
+        </button>
+      </div>
+      <div id="mobileDesignMenu" class="mobile-design-menu hidden">
+        <div id="mobileDesignList"></div>
+      </div>
+    </div>
     <div id="status" class="status-banner hidden"></div>
     <div id="map"></div>
+    <div id="leaderboardTray" class="mobile-leaderboard mobile-only collapsed">
+      <div class="leaderboard-shell">
+        <div class="leaderboard-handle"></div>
+        <div class="leaderboard-header">
+          <strong>Top parcels</strong>
+          <button id="leaderboardToggle" type="button" class="btn-secondary">
+            View
+          </button>
+        </div>
+        <div class="leaderboard-content" id="leaderboardContent">
+          <div class="leaderboard-list" id="leaderboardList"></div>
+          <div class="leaderboard-detail" id="leaderboardDetail">
+            Placements will appear here during a crawl.
+          </div>
+        </div>
+      </div>
+    </div>
 
     <script>
       const key = "CBo7orMIbQ1XA33zeKV8";
-      const styleUrl = `https://api.maptiler.com/maps/streets-v2/style.json?key=${key}`;
+      const styleUrl = `https://api.maptiler.com/maps/hybrid/style.json?key=${key}`;
       const API_BASE = "https://landlens.up.railway.app";
       const JOB_SOURCE_ID = "job-parcels";
       const JOB_FILL_LAYER_ID = "job-parcels-fill";
@@ -448,6 +657,15 @@ No job config prepared yet.</pre
         eventStreamLog: document.getElementById("eventStreamLog"),
         configPreview: document.getElementById("configPreview"),
         parcelInfo: document.getElementById("parcelInfo"),
+        mobileDesignToggle: document.getElementById("mobileDesignToggle"),
+        mobileDesignMenu: document.getElementById("mobileDesignMenu"),
+        mobileDesignList: document.getElementById("mobileDesignList"),
+        mobileDesignCurrent: document.getElementById("mobileDesignCurrent"),
+        leaderboardTray: document.getElementById("leaderboardTray"),
+        leaderboardToggle: document.getElementById("leaderboardToggle"),
+        leaderboardList: document.getElementById("leaderboardList"),
+        leaderboardDetail: document.getElementById("leaderboardDetail"),
+        leaderboardContent: document.getElementById("leaderboardContent"),
       };
 
       const appState = {
@@ -455,6 +673,8 @@ No job config prepared yet.</pre
         selectedDesign: null,
         job: null,
         selectedParcelId: null,
+        mobileDesignMenuOpen: false,
+        leaderboardOpen: false,
         pollTimers: { status: null, geo: null },
         abortControllers: new Set(),
         jobMarker: null,
@@ -479,6 +699,10 @@ No job config prepared yet.</pre
         overlayRefreshPending: false,
         parcelLayerHandlersBound: false,
         parcelArtifactIndex: {},
+        parcelPopup: null,
+        activeParcelPopupId: null,
+        leaderboardEntries: [],
+        leaderboardSelectedId: null,
         overlayStore: {
           parcels: new Map(),
           placements: new Map(),
@@ -532,7 +756,11 @@ No job config prepared yet.</pre
           ui.designPreview.textContent =
             "Select a design to preview shrink-wrap metadata.";
         }
+        if (ui.mobileDesignCurrent) {
+          ui.mobileDesignCurrent.textContent = "Choose…";
+        }
         drawDesignFootprint(null, null);
+        updateConfigPreview();
       }
 
       function renderDesignPreview(design, previewData) {
@@ -577,8 +805,17 @@ No job config prepared yet.</pre
         drawDesignFootprint(design, previewData);
       }
 
-      function drawDesignFootprint(design, previewData) {
-        const canvas = ui.designPreviewCanvas;
+      function updateConfigPreview(config) {
+        if (!ui.configPreview) return;
+        if (!config) {
+          ui.configPreview.textContent = "No job config prepared yet.";
+          return;
+        }
+        ui.configPreview.textContent = JSON.stringify(config, null, 2);
+      }
+
+      function drawDesignFootprint(design, previewData, targetCanvas) {
+        const canvas = targetCanvas || ui.designPreviewCanvas;
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -655,6 +892,7 @@ No job config prepared yet.</pre
           if (preview) {
             appState.designPreviews[cacheKey] = preview;
             renderDesignPreview(design, preview);
+            populateMobileDesignList();
           }
         } catch (err) {
           logMessage(
@@ -1175,6 +1413,56 @@ No job config prepared yet.</pre
             ? current
             : "";
         handleDesignChange();
+        populateMobileDesignList();
+      }
+
+      function populateMobileDesignList() {
+        if (!ui.mobileDesignList) return;
+        ui.mobileDesignList.innerHTML = "";
+        appState.designs.forEach((design, index) => {
+          const row = document.createElement("button");
+          row.type = "button";
+          row.className = "mobile-design-row";
+          row.dataset.index = String(index);
+          const canvas = document.createElement("canvas");
+          canvas.width = 120;
+          canvas.height = 90;
+          canvas.className = "design-thumb";
+          row.appendChild(canvas);
+          const info = document.createElement("div");
+          info.className = "mobile-design-info";
+          const title = document.createElement("strong");
+          title.textContent = design.name || design.slug || `Design ${index + 1}`;
+          const meta = document.createElement("span");
+          meta.textContent = `${design?.footprint_points?.length || 0} points`;
+          info.appendChild(title);
+          info.appendChild(meta);
+          row.appendChild(info);
+          row.addEventListener("click", () => {
+            selectDesignByIndex(index);
+            closeMobileDesignMenu();
+          });
+          ui.mobileDesignList.appendChild(row);
+          const cacheKey =
+            design.slug || design.id || design.name || design.dxf_url;
+          drawDesignFootprint(
+            design,
+            appState.designPreviews[cacheKey],
+            canvas,
+          );
+        });
+      }
+
+      function selectDesignByIndex(index) {
+        const select = ui.designSelect;
+        if (!select) return;
+        const option = Array.from(select.options).find(
+          (opt) => opt.dataset.index === String(index),
+        );
+        if (option) {
+          select.value = option.value;
+          handleDesignChange();
+        }
       }
 
       function handleDesignChange() {
@@ -1190,6 +1478,9 @@ No job config prepared yet.</pre
         }
         const design = appState.designs[Number(option.dataset.index)];
         appState.selectedDesign = design;
+        if (ui.mobileDesignCurrent) {
+          ui.mobileDesignCurrent.textContent = design.name || design.slug || "Design";
+        }
         updateJobStatus(
           `"${design.name || "Design"}" ready. Click the map to launch a crawl.`,
         );
@@ -1202,6 +1493,22 @@ No job config prepared yet.</pre
           }`,
         );
         updateDesignPreview(design);
+        updateConfigPreview();
+      }
+
+      function toggleMobileDesignMenu() {
+        if (!ui.mobileDesignMenu) return;
+        appState.mobileDesignMenuOpen = !appState.mobileDesignMenuOpen;
+        ui.mobileDesignMenu.classList.toggle(
+          "hidden",
+          !appState.mobileDesignMenuOpen,
+        );
+      }
+
+      function closeMobileDesignMenu() {
+        if (!ui.mobileDesignMenu) return;
+        appState.mobileDesignMenuOpen = false;
+        ui.mobileDesignMenu.classList.add("hidden");
       }
 
       async function handleMapClick(event) {
@@ -1237,7 +1544,9 @@ No job config prepared yet.</pre
             lastUpdated: Date.now(),
           });
         }
-        return store.get(normalized);
+        const detail = store.get(normalized);
+        if (detail) detail.parcelId = normalized;
+        return detail;
       }
 
       function resetParcelInfoPanel(message) {
@@ -1364,6 +1673,211 @@ No job config prepared yet.</pre
         ui.parcelInfo.textContent = lines.join("\n");
       }
 
+      function formatParcelDetailHtml(detail) {
+        if (!detail) return "<div class=\"parcel-popup\">No details available.</div>";
+        const parcel = detail.parcel || {};
+        const summary = detail.summary || {};
+        const best = detail.bestPlacement;
+        const address =
+          parcel.SITEADDRESS ||
+          parcel.official_address ||
+          summary.address ||
+          parcel.county_address ||
+          detail.parcelId ||
+          "";
+        const zoning =
+          parcel.official_zoning || parcel.zoning_classification || "Unknown zoning";
+        const owner = [parcel.OWNERNME1, parcel.OWNERNME2].filter(Boolean).join(" / ");
+        const lines = [];
+        lines.push("<div class=\"parcel-popup\">");
+        lines.push(`<h3>${address}</h3>`);
+        if (summary.max_composite != null) {
+          lines.push(
+            `<div class="parcel-popup-meta"><strong>Score:</strong> ${Number(summary.max_composite).toFixed(1)}</div>`,
+          );
+        }
+        lines.push(`<div class="parcel-popup-meta"><strong>Zoning:</strong> ${zoning}</div>`);
+        if (owner) {
+          lines.push(
+            `<div class="parcel-popup-meta"><strong>Owner:</strong> ${owner}</div>`,
+          );
+        }
+        if (parcel.future_land_use) {
+          lines.push(
+            `<div class="parcel-popup-meta"><strong>Future land use:</strong> ${parcel.future_land_use}</div>`,
+          );
+        }
+        if (parcel.land_lot_page) {
+          lines.push(
+            `<div class="parcel-popup-meta"><strong>Land lot:</strong> ${parcel.land_lot_page}</div>`,
+          );
+        }
+        if (best && best.rotation_deg != null) {
+          const offsetX =
+            best.offset_x_m ??
+            (Array.isArray(best.offset) ? best.offset[0] : null);
+          const offsetY =
+            best.offset_y_m ??
+            (Array.isArray(best.offset) ? best.offset[1] : null);
+          const offsetLine =
+            offsetX != null && offsetY != null
+              ? ` · Offset (${offsetX}, ${offsetY})`
+              : "";
+          lines.push(
+            `<div class="parcel-popup-meta"><strong>Top placement:</strong> ${best.rotation_deg}°${offsetLine}</div>`,
+          );
+        }
+        const links = [];
+        if (parcel.tax_assessor_link) {
+          links.push(
+            `<a href="${parcel.tax_assessor_link}" target="_blank" rel="noopener">Tax assessor</a>`,
+          );
+        }
+        if (parcel.document?.DOC_LINK) {
+          links.push(
+            `<a href="${parcel.document.DOC_LINK}" target="_blank" rel="noopener">Document</a>`,
+          );
+        }
+        if (parcel.land_lot_link) {
+          links.push(
+            `<a href="${parcel.land_lot_link}" target="_blank" rel="noopener">Land lot map</a>`,
+          );
+        }
+        if (links.length) {
+          lines.push(`<div class="parcel-popup-meta">${links.join(" · ")}</div>`);
+        }
+        lines.push("</div>");
+        return lines.join("");
+      }
+
+      function getParcelFeatureById(parcelId) {
+        const normalized = normalizeParcelId(parcelId);
+        if (!normalized) return null;
+        const store = appState.overlayStore;
+        if (store.parcels.has(normalized)) {
+          return store.parcels.get(normalized);
+        }
+        for (const feature of store.parcels.values()) {
+          const id =
+            feature.properties?.parcelId || feature.properties?.id || null;
+          if (normalizeParcelId(id) === normalized) {
+            return feature;
+          }
+        }
+        return null;
+      }
+
+      function clearParcelTooltip() {
+        if (appState.parcelPopup) {
+          appState.parcelPopup.remove();
+          appState.parcelPopup = null;
+          appState.activeParcelPopupId = null;
+        }
+      }
+
+      function showParcelTooltip(parcelId, detail) {
+        if (!map || !detail) return;
+        const feature = getParcelFeatureById(parcelId);
+        let lngLat = null;
+        if (feature?.geometry?.coordinates) {
+          const centroid = computeCentroid(feature.geometry.coordinates);
+          if (centroid && Number.isFinite(centroid[0]) && Number.isFinite(centroid[1])) {
+            lngLat = [centroid[0], centroid[1]];
+          }
+        }
+        if (!lngLat) {
+          const center = map.getCenter();
+          lngLat = [center.lng, center.lat];
+        }
+        const html = formatParcelDetailHtml(detail);
+        clearParcelTooltip();
+        const popup = new maplibregl.Popup({ maxWidth: "320px" })
+          .setLngLat(lngLat)
+          .setHTML(html)
+          .addTo(map);
+        popup.on("close", () => {
+          if (appState.parcelPopup === popup) {
+            appState.parcelPopup = null;
+            appState.activeParcelPopupId = null;
+          }
+        });
+        appState.parcelPopup = popup;
+        appState.activeParcelPopupId = parcelId;
+      }
+
+      function updateLeaderboard() {
+        const detailMap = appState.overlayStore.parcelDetails;
+        const entries = Array.from(detailMap.entries())
+          .map(([parcelId, detail]) => ({
+            parcelId,
+            detail,
+            score: Number(detail.summary?.max_composite) || 0,
+          }))
+          .filter((entry) => entry.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 10);
+        appState.leaderboardEntries = entries;
+        renderLeaderboard();
+      }
+
+      function renderLeaderboard() {
+        if (!ui.leaderboardList || !ui.leaderboardDetail) return;
+        ui.leaderboardList.innerHTML = "";
+        if (!appState.leaderboardEntries.length) {
+          ui.leaderboardDetail.textContent =
+            "Placements will appear here during a crawl.";
+          return;
+        }
+        appState.leaderboardEntries.forEach((entry) => {
+          const row = document.createElement("button");
+          row.type = "button";
+          row.className = "leaderboard-row";
+          if (appState.leaderboardSelectedId === entry.parcelId) {
+            row.classList.add("active");
+          }
+          const title = document.createElement("div");
+          title.textContent =
+            entry.detail.summary?.address || entry.parcelId || "Parcel";
+          const score = document.createElement("div");
+          score.className = "leaderboard-row-score";
+          score.textContent = entry.score.toFixed(1);
+          row.appendChild(title);
+          row.appendChild(score);
+          row.addEventListener("click", () => {
+            appState.leaderboardSelectedId = entry.parcelId;
+            renderLeaderboard();
+            showLeaderboardDetail(entry);
+            appState.selectedParcelId = entry.parcelId;
+            updateSelectedParcelHighlight();
+            ensureParcelDetailLoaded(entry.parcelId).then(() => {
+              const detail = getParcelDetail(entry.parcelId);
+              showParcelTooltip(entry.parcelId, detail);
+            });
+          });
+          ui.leaderboardList.appendChild(row);
+        });
+        if (appState.leaderboardSelectedId) {
+          const selected = appState.leaderboardEntries.find(
+            (entry) => entry.parcelId === appState.leaderboardSelectedId,
+          );
+          if (selected) {
+            showLeaderboardDetail(selected);
+          }
+        }
+      }
+
+      function showLeaderboardDetail(entry) {
+        if (!ui.leaderboardDetail) return;
+        ui.leaderboardDetail.innerHTML = formatParcelDetailHtml(entry.detail);
+      }
+
+      function toggleLeaderboardTray() {
+        if (!ui.leaderboardTray || !ui.leaderboardToggle) return;
+        appState.leaderboardOpen = !appState.leaderboardOpen;
+        ui.leaderboardTray.classList.toggle("collapsed", !appState.leaderboardOpen);
+        ui.leaderboardToggle.textContent = appState.leaderboardOpen ? "Hide" : "View";
+      }
+
       function ingestParcelDataset(dataset) {
         if (!dataset) return;
         const parcelIdCandidate =
@@ -1387,6 +1901,7 @@ No job config prepared yet.</pre
         if (appState.selectedParcelId === normalized) {
           updateParcelInfoPanel(normalized);
         }
+        updateLeaderboard();
       }
 
       function ingestParcelSummaryFromOverlayFeature(feature) {
@@ -1414,6 +1929,7 @@ No job config prepared yet.</pre
         if (appState.selectedParcelId === normalized) {
           updateParcelInfoPanel(normalized);
         }
+        updateLeaderboard();
       }
 
       function updateParcelPlacementDetail(parcelId, placement, isBest) {
@@ -1453,6 +1969,7 @@ No job config prepared yet.</pre
         if (!normalized) return null;
         const existing = getParcelDetail(normalized);
         if (existing?.parcel) {
+          existing.parcelId = normalized;
           return existing;
         }
         const url = appState.parcelArtifactIndex[normalized];
@@ -1469,7 +1986,11 @@ No job config prepared yet.</pre
             "error",
           );
         }
-        return getParcelDetail(normalized);
+        const refreshed = getParcelDetail(normalized);
+        if (refreshed) {
+          refreshed.parcelId = normalized;
+        }
+        return refreshed;
       }
 
       async function handleParcelFeatureClick(event) {
@@ -1489,11 +2010,22 @@ No job config prepared yet.</pre
           feature.properties.LOWPARCELID;
         const normalized = normalizeParcelId(parcelId);
         if (!normalized) return;
+        if (
+          appState.selectedParcelId === normalized &&
+          appState.parcelPopup &&
+          appState.activeParcelPopupId === normalized
+        ) {
+          clearParcelTooltip();
+          appState.selectedParcelId = null;
+          updateSelectedParcelHighlight();
+          return;
+        }
         appState.selectedParcelId = normalized;
         updateParcelInfoPanel(normalized);
         updateSelectedParcelHighlight();
-        await ensureParcelDetailLoaded(normalized);
+        const detail = await ensureParcelDetailLoaded(normalized);
         updateParcelInfoPanel(normalized);
+        showParcelTooltip(normalized, detail || getParcelDetail(normalized));
       }
 
       function updateSelectedParcelHighlight() {
@@ -1595,6 +2127,7 @@ No job config prepared yet.</pre
           dxf_url: design.dxf_url,
           config,
         };
+        updateConfigPreview(config);
         if (Array.isArray(design.footprint_points)) {
           payload.footprint_points = design.footprint_points;
         }
@@ -2462,6 +2995,10 @@ No job config prepared yet.</pre
         appState.selectedParcelId = null;
         resetParcelInfoPanel();
         updateSelectedParcelHighlight();
+        clearParcelTooltip();
+        appState.leaderboardEntries = [];
+        appState.leaderboardSelectedId = null;
+        renderLeaderboard();
       }
 
       function normalizePolygonGeometry(input) {
@@ -2858,6 +3395,25 @@ No job config prepared yet.</pre
       ui.cancelJobBtn.addEventListener("click", () =>
         cancelActiveJob("Job cancelled by user.", true),
       );
+      if (ui.mobileDesignToggle) {
+        ui.mobileDesignToggle.addEventListener("click", (event) => {
+          event.stopPropagation();
+          toggleMobileDesignMenu();
+        });
+      }
+      if (ui.mobileDesignMenu) {
+        ui.mobileDesignMenu.addEventListener("click", (event) =>
+          event.stopPropagation(),
+        );
+      }
+      document.addEventListener("click", () => {
+        if (appState.mobileDesignMenuOpen) {
+          closeMobileDesignMenu();
+        }
+      });
+      if (ui.leaderboardToggle) {
+        ui.leaderboardToggle.addEventListener("click", toggleLeaderboardTray);
+      }
 
       window.addEventListener("beforeunload", () => {
         cancelActiveJob("Page closing. Cancelling crawl.", true);
@@ -2879,6 +3435,8 @@ No job config prepared yet.</pre
       loadDesigns();
       updateJobStatus("Select a design, then click the map.");
       resetParcelInfoPanel();
+      updateConfigPreview();
+      renderLeaderboard();
     </script>
   </body>
 </html>

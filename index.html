@@ -1530,11 +1530,6 @@ Select a design to preview shrink-wrap metadata.</pre
             cache.index = 0;
           }
           cache.jobId = jobId;
-          Object.keys(cache.data).forEach((url) => {
-            if (!urls.includes(url)) {
-              delete cache.data[url];
-            }
-          });
           const toFetch = urls;
           await Promise.all(
             toFetch.map(async (url) => {

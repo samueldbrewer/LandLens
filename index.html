@@ -1057,21 +1057,36 @@ Select a design to preview shrink-wrap metadata.</pre
           suppressNextClick = false;
           return;
         }
+        await showAddressPopup(event.lngLat);
+      }
+
+      function canStartJob() {
         if (!appState.selectedDesign) {
           updateJobStatus(
             "Pick a shrink-wrap before launching a crawl.",
             "error",
           );
-          return;
+          return false;
         }
         if (appState.job) {
           updateJobStatus(
             "A job is already running. Wait or cancel it first.",
             "error",
           );
-          return;
+          return false;
         }
-        startJobAtPoint(event.lngLat);
+        return true;
+      }
+
+      async function showAddressPopup(lngLat) {
+        try {
+          const address = await reverseGeocode(lngLat);
+          showPopup(lngLat, address);
+        } catch (err) {
+          setStatus(`Reverse geocode failed: ${err.message}`, "error");
+          showPopup(lngLat, "Unable to retrieve address");
+          console.error(err);
+        }
       }
 
       async function startJobAtPoint(lngLat) {
@@ -2337,17 +2352,15 @@ Select a design to preview shrink-wrap metadata.</pre
         if (!map) return;
 
         map.on("mousedown", (e) => {
+          clearTimeout(longPressTimer);
           longPressTimer = setTimeout(async () => {
             longPressCoords = e.lngLat;
+            suppressNextClick = true;
             try {
-              const address = await reverseGeocode(longPressCoords);
-              showPopup(longPressCoords, address);
+              if (!canStartJob()) return;
+              await startJobAtPoint(longPressCoords);
             } catch (err) {
-              setStatus(`Reverse geocode failed: ${err.message}`, "error");
-              showPopup(longPressCoords, "Unable to retrieve address");
-              console.error(err);
-            } finally {
-              suppressNextClick = true;
+              console.error("Long-press job start failed", err);
             }
           }, 600);
         });

@@ -1256,6 +1256,9 @@ Select a design to preview shrink-wrap metadata.</pre
               if (response.status === 404) {
                 continue;
               }
+              if (response.status === 304) {
+                return;
+              }
               throw new Error(`Event poll failed (${response.status})`);
             }
             text = await response.text();

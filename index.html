@@ -24,6 +24,12 @@
           sans-serif;
       }
 
+      body.loading #map,
+      body.loading .control-panel,
+      body.loading .mobile-only {
+        opacity: 0;
+      }
+
       #map {
         position: absolute;
         top: 0;
@@ -57,6 +63,53 @@
 
       .status-banner.hidden {
         display: none;
+      }
+
+      .app-loading {
+        position: fixed;
+        inset: 0;
+        background: radial-gradient(circle at 20% 20%, #eef2ff, #f8fafc 45%, #e0f2fe);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.25s ease;
+      }
+
+      .app-loading.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .app-loading .loading-card {
+        background: #ffffff;
+        border-radius: 18px;
+        padding: 18px 22px;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.15);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+      }
+
+      .app-loading .spinner {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 3px solid #c7d2fe;
+        border-top-color: #1d4ed8;
+        animation: spin 0.75s linear infinite;
+      }
+
+      .app-loading .loading-text {
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
       }
 
       body.mobile-mode .desktop-only {
@@ -617,7 +670,13 @@
       }
     </style>
   </head>
-  <body>
+  <body class="loading">
+    <div id="appLoading" class="app-loading">
+      <div class="loading-card">
+        <div class="spinner" aria-hidden="true"></div>
+        <div class="loading-text">Loading map…</div>
+      </div>
+    </div>
     <div class="control-panel">
       <div class="panel-section">
         <h1>Select a design and long press to start a crawl.</h1>
@@ -1181,6 +1240,7 @@
           initializeOverlaySources();
           attachLongPressHandler();
           map.on("click", handleMapClick);
+          hideLoadingOverlay();
         });
 
         map.on("idle", () => {
@@ -3856,6 +3916,17 @@
       window.addEventListener("beforeunload", () => {
         cancelActiveJob("Page closing. Cancelling crawl.", true);
       });
+
+      function hideLoadingOverlay(message) {
+        const overlay = document.getElementById("appLoading");
+        if (overlay) {
+          const textEl = overlay.querySelector(".loading-text");
+          if (message && textEl) textEl.textContent = message;
+          overlay.classList.add("hidden");
+          setTimeout(() => overlay.remove(), 400);
+        }
+        document.body.classList.remove("loading");
+      }
 
       function detectMobile() {
         const mobileUA =

@@ -224,10 +224,11 @@
         padding: 10px;
         border-radius: 12px;
         border: 1px solid rgba(148, 163, 184, 0.4);
-        background: #ffffff;
+        background: #f4f6fb;
         margin-bottom: 8px;
         width: 100%;
         text-align: left;
+        color: #0f172a;
       }
 
       .mobile-design-row:last-child {
@@ -248,17 +249,24 @@
 
       .mobile-design-info strong {
         display: block;
-        color: #0f172a;
+        color: inherit;
       }
 
       .mobile-design-info span {
-        color: #475569;
+        color: inherit;
         font-size: 0.85rem;
       }
 
       .mobile-design-row.active {
-        border-color: #2563eb;
-        box-shadow: 0 8px 18px rgba(37, 99, 235, 0.15);
+        border-color: #0f172a;
+        background: #0f172a;
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.2);
+        color: #ffffff;
+      }
+
+      .mobile-design-row.active .mobile-design-info strong,
+      .mobile-design-row.active .mobile-design-info span {
+        color: #ffffff;
       }
 
       .mobile-leaderboard {
@@ -349,14 +357,16 @@
         padding: 12px;
         border-radius: 14px;
         border: 1px solid rgba(148, 163, 184, 0.5);
-        background: #fff;
+        background: #f4f6fb;
         cursor: pointer;
         transition: box-shadow 0.2s ease, border-color 0.2s ease;
+        color: #0f172a;
       }
 
       .desktop-design-row.active {
-        border-color: #2563eb;
-        box-shadow: 0 10px 24px rgba(37, 99, 235, 0.15);
+        border-color: #0f172a;
+        background: #0f172a;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.2);
       }
 
       .desktop-design-row .design-thumb {
@@ -370,12 +380,23 @@
       .desktop-design-row strong {
         display: block;
         font-size: 0.98rem;
-        color: #0f172a;
       }
 
       .desktop-design-row span {
         color: #475569;
         font-size: 0.85rem;
+      }
+
+      .desktop-design-row.active .mobile-design-info strong,
+      .desktop-design-row.active .mobile-design-info span,
+      .desktop-design-row.active strong,
+      .desktop-design-row.active span {
+        color: #ffffff;
+      }
+
+      .mobile-design-row.active .design-thumb,
+      .desktop-design-row.active .design-thumb {
+        border-color: rgba(255, 255, 255, 0.6);
       }
 
       .mobile-leaderboard.collapsed .leaderboard-content {
@@ -416,12 +437,12 @@
 
       .desktop-leaderboard-flyout {
         position: absolute;
-        top: 90px;
+        bottom: 20px;
         right: 20px;
         width: 320px;
         opacity: 0;
         pointer-events: none;
-        transform: translateY(-10px);
+        transform: translateY(10px);
         transition: opacity 0.25s ease, transform 0.25s ease;
         z-index: 3;
       }

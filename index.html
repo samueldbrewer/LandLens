@@ -659,7 +659,7 @@
     <div class="mobile-only">
       <div class="mobile-bar">
         <button id="mobileDesignToggle" type="button">
-          <span>Select shrink-wrap</span>
+          <span>Select design</span>
           <strong id="mobileDesignCurrent">Choose…</strong>
         </button>
         <button
@@ -1481,6 +1481,17 @@
         }
       }
 
+      function getDesignOptionValue(design, index) {
+        if (!design) return `design-${index}`;
+        return (
+          design.slug ||
+          design.id ||
+          design.name ||
+          design.dxf_url ||
+          `design-${index}`
+        );
+      }
+
       async function loadDesigns() {
         setDesignStatus("Loading designs...");
         logMessage("GET /designs");
@@ -1489,8 +1500,23 @@
           const designs = Array.isArray(payload)
             ? payload
             : payload?.designs || [];
+          let previousSelectionValue = null;
+          if (
+            typeof appState.selectedDesignIndex === "number" &&
+            appState.designs[appState.selectedDesignIndex]
+          ) {
+            previousSelectionValue = getDesignOptionValue(
+              appState.designs[appState.selectedDesignIndex],
+              appState.selectedDesignIndex,
+            );
+          } else if (appState.selectedDesign) {
+            previousSelectionValue = getDesignOptionValue(
+              appState.selectedDesign,
+              appState.selectedDesignIndex ?? -1,
+            );
+          }
           appState.designs = designs;
-          populateDesignSelect();
+          populateDesignSelect(previousSelectionValue);
           setDesignStatus(
             `Loaded ${designs.length} design${designs.length === 1 ? "" : "s"}.`,
           );
@@ -1506,38 +1532,45 @@
         }
       }
 
-      function populateDesignSelect() {
+      function populateDesignSelect(previousSelectionValue) {
         const select = ui.designSelect;
         if (!select) return;
-        const current = select.value;
         select.innerHTML =
-          '<option value="">-- Choose a shrink-wrap --</option>';
+          '<option value="">-- Select a design --</option>';
+        const shouldRestore =
+          typeof previousSelectionValue === "string" &&
+          previousSelectionValue.length > 0;
+        let restoredValue = null;
         appState.designs.forEach((design, index) => {
           const option = document.createElement("option");
-          option.value =
-            design.slug || design.id || design.name || `design-${index}`;
+          const optionValue = getDesignOptionValue(design, index);
+          option.value = optionValue;
           option.textContent =
             design.name || design.slug || `Design ${index + 1}`;
           option.dataset.index = index;
+          if (!restoredValue && shouldRestore && optionValue === previousSelectionValue) {
+            restoredValue = optionValue;
+            appState.selectedDesignIndex = index;
+          }
           select.appendChild(option);
         });
-        if (
-          current &&
-          Array.from(select.options).some((opt) => opt.value === current)
-        ) {
-          select.value = current;
+        if (restoredValue) {
+          select.value = restoredValue;
         } else {
           select.value = "";
+          select.selectedIndex = 0;
+          appState.selectedDesign = null;
+          appState.selectedDesignIndex = null;
         }
         populateDesktopDesignList();
         populateMobileDesignList();
-        if (select.value) {
+        if (restoredValue) {
           handleDesignChange();
         } else {
-          appState.selectedDesign = null;
-          appState.selectedDesignIndex = null;
           updateDesignRowStates();
-          updateJobStatus("Select a design and long press on the map to start a crawl.");
+          updateJobStatus(
+            "Select a design and long press on the map to start a crawl.",
+          );
           updateJobMeta("");
           resetDesignPreview();
         }
@@ -2168,7 +2201,7 @@
       function canStartJob() {
         if (!appState.selectedDesign) {
           updateJobStatus(
-            "Pick a shrink-wrap before launching a crawl.",
+            "Pick a design before launching a crawl.",
             "error",
           );
           return false;

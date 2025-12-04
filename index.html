@@ -74,6 +74,7 @@
       .control-panel {
         position: absolute;
         top: 20px;
+        bottom: 20px;
         left: 20px;
         width: 420px;
         background: #f9fafb;
@@ -146,26 +147,41 @@
         cursor: not-allowed;
       }
 
-      .btn-cancel {
-        background: #ffffff;
-        color: #b91c1c;
-        border: 1px solid rgba(185, 28, 28, 0.4);
-        box-shadow: none;
-      }
-
-      .btn-cancel:hover {
-        background: #fff5f5;
-      }
-
-      #cancelJobBtn {
+      .job-control-btn {
         min-width: 120px;
         display: none;
         border-radius: 999px;
         padding: 8px 18px;
+        font-weight: 600;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
       }
 
-      #mobileCancelBtn {
-        display: none;
+      .job-control-btn:active {
+        transform: translateY(1px);
+      }
+
+      .job-control-btn.btn-stop {
+        background: #fef3c7;
+        border-color: #facc15;
+        color: #92400e;
+        box-shadow: 0 6px 16px rgba(250, 204, 21, 0.3);
+      }
+
+      .job-control-btn.btn-stop:hover {
+        background: #fde68a;
+      }
+
+      .job-control-btn.btn-clear {
+        background: #fee2e2;
+        border-color: #fecaca;
+        color: #991b1b;
+        box-shadow: 0 6px 16px rgba(248, 113, 113, 0.25);
+      }
+
+      .job-control-btn.btn-clear:hover {
+        background: #fecaca;
       }
 
       .mobile-cancel {
@@ -173,7 +189,7 @@
         margin-top: 8px;
         border-radius: 999px;
         padding: 10px 14px;
-        box-shadow: 0 6px 16px rgba(185, 28, 28, 0.15);
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
       }
 
       .mobile-bar {
@@ -423,11 +439,11 @@
       .leaderboard-detail .parcel-popup,
       .leaderboard-detail .parcel-popup h3,
       .leaderboard-detail .parcel-popup .parcel-popup-meta {
-        color: #f8fafc;
+        color: #0f172a;
       }
 
       .leaderboard-detail .parcel-popup a {
-        color: #93c5fd;
+        color: #2563eb;
       }
 
 
@@ -635,12 +651,11 @@
           </div>
           <button
             id="cancelJobBtn"
-            class="btn-secondary"
+            class="job-control-btn"
             type="button"
             disabled
-            style="min-width: 120px; display: none"
           >
-            Cancel job
+            Stop job
           </button>
         </div>
       </div>
@@ -665,9 +680,9 @@
         <button
           id="mobileCancelBtn"
           type="button"
-          class="btn-cancel mobile-cancel"
+          class="job-control-btn mobile-cancel"
         >
-          Cancel job
+          Stop job
         </button>
       </div>
       <div id="mobileDesignMenu" class="mobile-design-menu hidden">
@@ -776,6 +791,7 @@
         selectedParcelId: null,
         mobileDesignMenuOpen: false,
         leaderboardOpen: false,
+        jobControlState: "hidden",
         pollTimers: { status: null, geo: null },
         abortControllers: new Set(),
         jobMarker: null,
@@ -816,6 +832,8 @@
         },
         eventFeed: [],
       };
+
+      setJobControlState(appState.jobControlState);
 
       function getDesignFilename(design) {
         const url = design?.dxf_url;
@@ -981,12 +999,52 @@
       function setControlsDisabled(disabled) {
         ui.designSelect.disabled = disabled;
         ui.refreshDesignsBtn.disabled = disabled;
-        ui.cancelJobBtn.disabled = !disabled;
-        if (ui.mobileCancelBtn) {
-          ui.mobileCancelBtn.disabled = !disabled;
-          ui.mobileCancelBtn.style.display = disabled ? "block" : "none";
+        document
+          .querySelectorAll(".desktop-design-row, .mobile-design-row")
+          .forEach((row) => {
+            row.disabled = disabled;
+          });
+      }
+
+      function updateJobControlButtons() {
+        const state = appState.jobControlState || "hidden";
+        const config =
+          state === "stop"
+            ? { label: "Stop job", stop: true, visible: true }
+            : state === "clear"
+              ? { label: "Clear job", stop: false, visible: true }
+              : { label: "Stop job", stop: true, visible: false };
+        const buttons = [
+          { el: ui.cancelJobBtn, block: false },
+          { el: ui.mobileCancelBtn, block: true },
+        ];
+        buttons.forEach(({ el, block }) => {
+          if (!el) return;
+          el.textContent = config.label;
+          el.classList.remove("btn-stop", "btn-clear");
+          if (config.visible) {
+            el.style.display = block ? "block" : "inline-block";
+            el.classList.add(config.stop ? "btn-stop" : "btn-clear");
+            el.disabled = false;
+          } else {
+            el.style.display = "none";
+            el.disabled = true;
+          }
+        });
+      }
+
+      function setJobControlState(state) {
+        appState.jobControlState = state;
+        updateJobControlButtons();
+      }
+
+      function handleJobControlClick(event) {
+        event.preventDefault();
+        if (appState.jobControlState === "stop") {
+          handleStopJob();
+        } else if (appState.jobControlState === "clear") {
+          clearJobView();
         }
-        ui.cancelJobBtn.style.display = disabled ? "inline-block" : "none";
       }
 
       function generateLogId() {
@@ -2236,6 +2294,7 @@
         const design = appState.selectedDesign;
         if (!design) return;
         setControlsDisabled(true);
+        setJobControlState("hidden");
         updateJobSource(EMPTY_GEOJSON);
         clearOverlayData();
         resetEventFeed("Awaiting crawler activity...");
@@ -2304,6 +2363,7 @@
             lngLat,
             designName: design.name || design.slug || "Design",
           };
+          setJobControlState("stop");
           logMessage("Job submitted", data);
           placeJobMarker(lngLat);
           updateJobStatus(`Job ${appState.job.id || ""} queued...`);
@@ -2322,6 +2382,7 @@
           logMessage("Job start failed", { error: err.message }, "error");
           pushStatusUpdate("Job failed to start.", "error");
           setControlsDisabled(false);
+          setJobControlState("hidden");
         }
       }
 
@@ -3434,7 +3495,7 @@
         clearJobMarker();
         stopEventStream();
         setControlsDisabled(false);
-        ui.cancelJobBtn.disabled = true;
+        setJobControlState("clear");
         updateJobStatus(message || "Job finished.");
         logMessage("Job finalized", { message, jobId: finishedJobId });
         appState.job = null;
@@ -3447,7 +3508,8 @@
         appState.abortControllers.clear();
       }
 
-      function cancelActiveJob(reason, notify = false) {
+      function cancelActiveJob(reason, notify = false, options = {}) {
+        const { clearOverlays = true } = options;
         if (!appState.job) return;
         const jobId = appState.job.id;
         updateJobStatus(reason || "Job cancelled.", "error");
@@ -3460,13 +3522,36 @@
         clearJobMarker();
         appState.job = null;
         setControlsDisabled(false);
-        ui.cancelJobBtn.disabled = true;
-        updateJobSource(EMPTY_GEOJSON);
-        updateLogTail("");
-        clearOverlayData();
-        resetEventFeed("No activity yet.");
+        if (clearOverlays) {
+          updateJobSource(EMPTY_GEOJSON);
+          updateLogTail("");
+          clearOverlayData();
+          resetEventFeed("No activity yet.");
+          setJobControlState("hidden");
+        }
         pushStatusUpdate(reason || "Job cancelled.", "error");
         stopEventStream();
+      }
+
+      function handleStopJob() {
+        if (!appState.job) return;
+        cancelActiveJob("Job stopped by user.", true, { clearOverlays: false });
+        updateJobStatus(
+          "Job stopped. Review results, then clear when you're ready.",
+        );
+        updateJobMeta("");
+        pushStatusUpdate("Job stopped by user.", "info");
+        setJobControlState("clear");
+      }
+
+      function clearJobView() {
+        updateJobSource(EMPTY_GEOJSON);
+        clearOverlayData();
+        resetEventFeed("No activity yet.");
+        pushStatusUpdate("View cleared.", "info");
+        updateJobStatus("Select a design and long press on the map to start a crawl.");
+        updateJobMeta("");
+        setJobControlState("hidden");
       }
 
       function sendCancellationSignal(jobId, reason) {
@@ -3552,13 +3637,11 @@
 
       ui.refreshDesignsBtn.addEventListener("click", loadDesigns);
       ui.designSelect.addEventListener("change", handleDesignChange);
-      ui.cancelJobBtn.addEventListener("click", () =>
-        cancelActiveJob("Job cancelled by user.", true),
-      );
+      if (ui.cancelJobBtn) {
+        ui.cancelJobBtn.addEventListener("click", handleJobControlClick);
+      }
       if (ui.mobileCancelBtn) {
-        ui.mobileCancelBtn.addEventListener("click", () =>
-          cancelActiveJob("Job cancelled by user.", true),
-        );
+        ui.mobileCancelBtn.addEventListener("click", handleJobControlClick);
       }
       if (ui.mobileDesignToggle) {
         ui.mobileDesignToggle.addEventListener("click", (event) => {

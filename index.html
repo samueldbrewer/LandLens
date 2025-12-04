@@ -3823,11 +3823,10 @@
 
       function attachLongPressHandler() {
         if (!map) return;
-
-        map.on("mousedown", (e) => {
+        const startTimer = (lngLat) => {
           clearTimeout(longPressTimer);
           longPressTimer = setTimeout(async () => {
-            longPressCoords = e.lngLat;
+            longPressCoords = lngLat;
             suppressNextClick = true;
             try {
               if (!canStartJob()) return;
@@ -3836,15 +3835,28 @@
               console.error("Long-press job start failed", err);
             }
           }, 600);
+        };
+
+        const clearTimer = () => {
+          clearTimeout(longPressTimer);
+        };
+
+        map.on("mousedown", (e) => {
+          startTimer(e.lngLat);
         });
 
-        map.on("mouseup", () => {
-          clearTimeout(longPressTimer);
+        map.on("mouseup", clearTimer);
+
+        map.on("mouseleave", clearTimer);
+
+        map.on("touchstart", (e) => {
+          if (e && Array.isArray(e.points) && e.points.length > 1) return;
+          startTimer(e.lngLat);
         });
 
-        map.on("mouseleave", () => {
-          clearTimeout(longPressTimer);
-        });
+        map.on("touchend", clearTimer);
+        map.on("touchcancel", clearTimer);
+        map.on("touchmove", clearTimer);
       }
 
       ui.refreshDesignsBtn.addEventListener("click", loadDesigns);

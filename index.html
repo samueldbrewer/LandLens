@@ -579,18 +579,21 @@
         </select>
       </div>
       <div class="panel-section">
-        <div id="jobStatusText" class="job-status">
-          Select a design, then click the map.
-        </div>
-        <div id="jobMetaText" class="job-meta"></div>
-        <div class="panel-actions">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px">
+          <div>
+            <div id="jobStatusText" class="job-status">
+              Select a design, then click the map.
+            </div>
+            <div id="jobMetaText" class="job-meta"></div>
+          </div>
           <button
             id="cancelJobBtn"
             class="btn-secondary"
             type="button"
             disabled
+            style="min-width: 120px; display: none"
           >
-            Cancel active job
+            Cancel job
           </button>
         </div>
       </div>
@@ -617,6 +620,25 @@
           <span>Select shrink-wrap</span>
           <strong id="mobileDesignCurrent">Choose…</strong>
         </button>
+        <button
+          id="mobileCancelBtn"
+          type="button"
+          style="
+            width: 100%;
+            margin-top: 8px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            border: none;
+            background: rgba(220, 38, 38, 0.9);
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            display: none;
+            box-shadow: 0 10px 25px rgba(220, 38, 38, 0.4);
+          "
+        >
+          Cancel job
+        </button>
       </div>
       <div id="mobileDesignMenu" class="mobile-design-menu hidden">
         <div id="mobileDesignList"></div>
@@ -625,7 +647,7 @@
     <div id="status" class="status-banner hidden"></div>
     <div id="map"></div>
     <div id="leaderboardTray" class="mobile-leaderboard mobile-only collapsed">
-      <div class="leaderboard-shell">
+      <div class="leaderboard-shell" id="leaderboardCard">
         <div class="leaderboard-handle"></div>
         <div class="leaderboard-header">
           <strong>Top parcels</strong>
@@ -703,6 +725,7 @@
         mobileDesignMenu: document.getElementById("mobileDesignMenu"),
         mobileDesignList: document.getElementById("mobileDesignList"),
         mobileDesignCurrent: document.getElementById("mobileDesignCurrent"),
+        mobileCancelBtn: document.getElementById("mobileCancelBtn"),
         leaderboardTray: document.getElementById("leaderboardTray"),
         leaderboardToggle: document.getElementById("leaderboardToggle"),
         leaderboardList: document.getElementById("leaderboardList"),
@@ -929,6 +952,11 @@
         ui.designSelect.disabled = disabled;
         ui.refreshDesignsBtn.disabled = disabled;
         ui.cancelJobBtn.disabled = !disabled;
+        if (ui.mobileCancelBtn) {
+          ui.mobileCancelBtn.disabled = !disabled;
+          ui.mobileCancelBtn.style.display = disabled ? "block" : "none";
+        }
+        ui.cancelJobBtn.style.display = disabled ? "inline-block" : "none";
       }
 
       function generateLogId() {
@@ -3478,6 +3506,12 @@
           closeMobileDesignMenu();
         }
       });
+      const leaderboardCard = document.getElementById("leaderboardCard");
+      if (leaderboardCard) {
+        leaderboardCard.addEventListener("click", () => {
+          toggleLeaderboardTray();
+        });
+      }
       if (ui.leaderboardToggle) {
         ui.leaderboardToggle.addEventListener("click", toggleLeaderboardTray);
       }

@@ -1860,6 +1860,29 @@
 
       function updateParcelInfoPanel() {}
 
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function formatListValue(value) {
+        if (!value) return null;
+        if (Array.isArray(value)) {
+          const flat = value.flat(Infinity).filter(Boolean);
+          return flat.length ? flat.join(", ") : null;
+        }
+        if (typeof value === "object") {
+          const vals = Object.values(value || {}).filter(Boolean);
+          return vals.length ? vals.join(", ") : null;
+        }
+        const str = String(value).trim();
+        return str || null;
+      }
+
       function formatParcelDetailHtml(detail) {
         if (!detail) return "<div class=\"parcel-popup\">No details available.</div>";
         const parcel = detail.parcel || {};
@@ -1875,29 +1898,28 @@
         const zoning =
           parcel.official_zoning || parcel.zoning_classification || "Unknown zoning";
         const owner = [parcel.OWNERNME1, parcel.OWNERNME2].filter(Boolean).join(" / ");
+        const overlays = formatOverlays(parcel);
         const lines = [];
         lines.push("<div class=\"parcel-popup\">");
-        lines.push(`<h3>${address}</h3>`);
+        lines.push(`<h3>${escapeHtml(address)}</h3>`);
+        const rows = [];
         if (summary.max_composite != null) {
-          lines.push(
-            `<div class="parcel-popup-meta"><strong>Score:</strong> ${Number(summary.max_composite).toFixed(1)}</div>`,
-          );
+          rows.push({
+            label: "Score",
+            value: `${Number(summary.max_composite).toFixed(1)}`,
+          });
         }
-        lines.push(`<div class="parcel-popup-meta"><strong>Zoning:</strong> ${zoning}</div>`);
-        if (owner) {
-          lines.push(
-            `<div class="parcel-popup-meta"><strong>Owner:</strong> ${owner}</div>`,
-          );
-        }
+        rows.push({ label: "Zoning", value: zoning });
+        if (owner) rows.push({ label: "Owner", value: owner });
+        if (overlays) rows.push({ label: "Overlays", value: overlays });
         if (parcel.future_land_use) {
-          lines.push(
-            `<div class="parcel-popup-meta"><strong>Future land use:</strong> ${parcel.future_land_use}</div>`,
-          );
+          rows.push({ label: "Future land use", value: parcel.future_land_use });
         }
-        if (parcel.land_lot_page) {
-          lines.push(
-            `<div class="parcel-popup-meta"><strong>Land lot:</strong> ${parcel.land_lot_page}</div>`,
-          );
+        if (parcel.land_lot_page || parcel.land_lot_link) {
+          rows.push({
+            label: "Land lot",
+            value: parcel.land_lot_page || parcel.land_lot_link,
+          });
         }
         if (best && best.rotation_deg != null) {
           const offsetX =
@@ -1910,10 +1932,20 @@
             offsetX != null && offsetY != null
               ? ` · Offset (${offsetX}, ${offsetY})`
               : "";
-          lines.push(
-            `<div class="parcel-popup-meta"><strong>Top placement:</strong> ${best.rotation_deg}°${offsetLine}</div>`,
-          );
+          rows.push({
+            label: "Top placement",
+            value: `${best.rotation_deg}°${offsetLine}`,
+          });
         }
+        rows.forEach(({ label, value }) => {
+          const formatted = formatListValue(value);
+          if (!formatted) return;
+          lines.push(
+            `<div class="parcel-popup-meta"><strong>${escapeHtml(
+              label,
+            )}:</strong> ${escapeHtml(formatted)}</div>`,
+          );
+        });
         const namedLinks = [];
         const fallbackLinks = [];
         const seenLinks = new Set();
@@ -1927,22 +1959,22 @@
           fallbackLinks.push(url);
           seenLinks.add(url);
         }
-        if (parcel.tax_assessor_link) {
-          addNamedLink(parcel.tax_assessor_link, "Tax assessor");
-        }
-        if (parcel.document?.DOC_LINK) {
-          addNamedLink(parcel.document.DOC_LINK, "Document");
-        }
-        if (parcel.land_lot_link) {
-          addNamedLink(parcel.land_lot_link, "Land lot map");
-        }
         const urlRegex = /^https?:\/\//i;
+        addNamedLink(parcel.tax_assessor_link, "Tax assessor");
+        addNamedLink(parcel.document?.DOC_LINK, "Document");
+        addNamedLink(parcel.land_lot_link, "Land lot map");
+        addNamedLink(parcel.zoning_link, "Zoning details");
+        ["links", "urls"].forEach((key) => {
+          if (Array.isArray(parcel[key])) {
+            parcel[key].forEach((url) => {
+              if (urlRegex.test(url)) addFallbackLink(url);
+            });
+          }
+        });
         function collectUnknownLinks(value) {
           if (!value) return;
           if (typeof value === "string") {
-            if (urlRegex.test(value)) {
-              addFallbackLink(value);
-            }
+            if (urlRegex.test(value)) addFallbackLink(value);
             return;
           }
           if (Array.isArray(value)) {
@@ -1953,7 +1985,7 @@
             Object.values(value).forEach(collectUnknownLinks);
           }
         }
-        collectUnknownLinks(parcel);
+        collectUnknownLinks(parcel.extra_links);
         const linkEntries = [...namedLinks];
         fallbackLinks.forEach((url, idx) => {
           linkEntries.push({ label: `Link ${idx + 1}`, url });
@@ -1962,10 +1994,12 @@
           const linkHtml = linkEntries
             .map(
               (entry) =>
-                `<a href="${entry.url}" target="_blank" rel="noopener">${entry.label}</a>`,
+                `<a href="${escapeHtml(entry.url)}" target="_blank" rel="noopener">${escapeHtml(entry.label)}</a>`,
             )
             .join(" · ");
-          lines.push(`<div class="parcel-popup-meta">${linkHtml}</div>`);
+          lines.push(
+            `<div class="parcel-popup-meta"><strong>Links:</strong> ${linkHtml}</div>`,
+          );
         }
         lines.push("</div>");
         return lines.join("");

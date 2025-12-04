@@ -223,8 +223,8 @@
         gap: 12px;
         padding: 10px;
         border-radius: 12px;
-        border: 1px solid rgba(148, 163, 184, 0.4);
-        background: #f4f6fb;
+        border: 1px solid #cbd5f5;
+        background: #ffffff;
         margin-bottom: 8px;
         width: 100%;
         text-align: left;
@@ -258,14 +258,9 @@
       }
 
       .mobile-design-row.active {
-        border-color: #0f172a;
-        background: #0f172a;
-        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.2);
-        color: #ffffff;
-      }
-
-      .mobile-design-row.active .mobile-design-info strong,
-      .mobile-design-row.active .mobile-design-info span {
+        border-color: #0f62fe;
+        background: #0f62fe;
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.25);
         color: #ffffff;
       }
 
@@ -356,17 +351,18 @@
         gap: 14px;
         padding: 12px;
         border-radius: 14px;
-        border: 1px solid rgba(148, 163, 184, 0.5);
-        background: #f4f6fb;
+        border: 1px solid #cbd5f5;
+        background: #ffffff;
         cursor: pointer;
         transition: box-shadow 0.2s ease, border-color 0.2s ease;
         color: #0f172a;
       }
 
       .desktop-design-row.active {
-        border-color: #0f172a;
-        background: #0f172a;
-        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.2);
+        border-color: #0f62fe;
+        background: #0f62fe;
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.25);
+        color: #ffffff;
       }
 
       .desktop-design-row .design-thumb {
@@ -387,10 +383,10 @@
         font-size: 0.85rem;
       }
 
-      .desktop-design-row.active .mobile-design-info strong,
-      .desktop-design-row.active .mobile-design-info span,
       .desktop-design-row.active strong,
-      .desktop-design-row.active span {
+      .desktop-design-row.active span,
+      .mobile-design-row.active .mobile-design-info strong,
+      .mobile-design-row.active .mobile-design-info span {
         color: #ffffff;
       }
 
@@ -1536,14 +1532,21 @@
           Array.from(select.options).some((opt) => opt.value === current)
         ) {
           select.value = current;
-        } else if (select.options.length > 1) {
-          select.value = select.options[1].value;
         } else {
           select.value = "";
         }
         populateDesktopDesignList();
         populateMobileDesignList();
-        handleDesignChange();
+        if (select.value) {
+          handleDesignChange();
+        } else {
+          appState.selectedDesign = null;
+          appState.selectedDesignIndex = null;
+          updateDesignRowStates();
+          updateJobStatus("Select a design, then click the map.");
+          updateJobMeta("");
+          resetDesignPreview();
+        }
       }
 
       function populateMobileDesignList() {

@@ -604,8 +604,7 @@
   <body>
     <div class="control-panel">
       <div class="panel-section">
-        <h1>Land Lens Runner</h1>
-        <p>Pick a design and tap the map to explore parcels.</p>
+        <h1>Select a design and long press to start a crawl.</h1>
       </div>
       <div class="panel-section mobile-only">
         <p style="margin: 0; color: #475569; font-size: 0.9rem">
@@ -1543,7 +1542,7 @@
           appState.selectedDesign = null;
           appState.selectedDesignIndex = null;
           updateDesignRowStates();
-          updateJobStatus("Select a design, then click the map.");
+          updateJobStatus("Select a design and long press on the map to start a crawl.");
           updateJobMeta("");
           resetDesignPreview();
         }
@@ -1674,7 +1673,7 @@
           appState.selectedDesign = null;
           appState.selectedDesignIndex = null;
           updateDesignRowStates();
-          updateJobStatus("Select a design, then click the map.");
+          updateJobStatus("Select a design and long press on the map to start a crawl.");
           updateJobMeta("");
           resetDesignPreview();
           return;
@@ -1686,17 +1685,8 @@
           ui.mobileDesignCurrent.textContent = design.name || design.slug || "Design";
         }
         updateDesignRowStates();
-        updateJobStatus(
-          `"${design.name || "Design"}" ready. Click the map to launch a crawl.`,
-        );
-        const footprintCount = design?.footprint_points?.length || 0;
-        updateJobMeta(
-          `${footprintCount} footprint points · Front direction: ${
-            design?.front_direction
-              ? JSON.stringify(design.front_direction)
-              : "auto"
-          }`,
-        );
+        updateJobStatus("Design selected. Long press on the map to start a crawl.");
+        updateJobMeta("");
         ensureDesignPreviewData(design);
       }
 
@@ -3619,7 +3609,7 @@
       detectMobile();
       initMap();
       loadDesigns();
-      updateJobStatus("Select a design, then click the map.");
+      updateJobStatus("Select a design and long press on the map to start a crawl.");
       resetParcelInfoPanel();
       resetEventFeed("No activity yet.");
       renderLeaderboard();

@@ -1909,24 +1909,58 @@
             `<div class="parcel-popup-meta"><strong>Top placement:</strong> ${best.rotation_deg}°${offsetLine}</div>`,
           );
         }
-        const links = [];
+        const namedLinks = [];
+        const fallbackLinks = [];
+        const seenLinks = new Set();
+        function addNamedLink(url, label) {
+          if (!url || seenLinks.has(url)) return;
+          namedLinks.push({ label, url });
+          seenLinks.add(url);
+        }
+        function addFallbackLink(url) {
+          if (!url || seenLinks.has(url)) return;
+          fallbackLinks.push(url);
+          seenLinks.add(url);
+        }
         if (parcel.tax_assessor_link) {
-          links.push(
-            `<a href="${parcel.tax_assessor_link}" target="_blank" rel="noopener">Tax assessor</a>`,
-          );
+          addNamedLink(parcel.tax_assessor_link, "Tax assessor");
         }
         if (parcel.document?.DOC_LINK) {
-          links.push(
-            `<a href="${parcel.document.DOC_LINK}" target="_blank" rel="noopener">Document</a>`,
-          );
+          addNamedLink(parcel.document.DOC_LINK, "Document");
         }
         if (parcel.land_lot_link) {
-          links.push(
-            `<a href="${parcel.land_lot_link}" target="_blank" rel="noopener">Land lot map</a>`,
-          );
+          addNamedLink(parcel.land_lot_link, "Land lot map");
         }
-        if (links.length) {
-          lines.push(`<div class="parcel-popup-meta">${links.join(" · ")}</div>`);
+        const urlRegex = /^https?:\/\//i;
+        function collectUnknownLinks(value) {
+          if (!value) return;
+          if (typeof value === "string") {
+            if (urlRegex.test(value)) {
+              addFallbackLink(value);
+            }
+            return;
+          }
+          if (Array.isArray(value)) {
+            value.forEach(collectUnknownLinks);
+            return;
+          }
+          if (typeof value === "object") {
+            Object.values(value).forEach(collectUnknownLinks);
+          }
+        }
+        collectUnknownLinks(parcel);
+        const linkEntries = [...namedLinks];
+        fallbackLinks.forEach((url, idx) => {
+          linkEntries.push({ label: `Link ${idx + 1}`, url });
+        });
+        if (linkEntries.length) {
+          const linkHtml = linkEntries
+            .map(
+              (entry) =>
+                `<a href="${entry.url}" target="_blank" rel="noopener">${entry.label}</a>`,
+            )
+            .join(" · ");
+          lines.push(`<div class="parcel-popup-meta">${linkHtml}</div>`);
         }
         lines.push("</div>");
         return lines.join("");
@@ -2314,9 +2348,9 @@
           target_lat: lngLat.lat,
           target_lon: lngLat.lng,
           cycles: 10,
-          parcel_workers: 8,
-          score_workers: 16,
-          rotation_step: 45,
+          parcel_workers: 4,
+          score_workers: 8,
+          rotation_step: 90,
           full_rotation: false,
           buffer: 20,
           setback: 5,

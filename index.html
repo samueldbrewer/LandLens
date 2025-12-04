@@ -1203,6 +1203,24 @@
           type: "geojson",
           data: EMPTY_GEOJSON,
         });
+        const applyTransitions = () => {
+          map.setPaintProperty(JOB_FILL_LAYER_ID, "fill-opacity-transition", {
+            duration: 120,
+            delay: 0,
+          });
+          map.setPaintProperty(JOB_FILL_LAYER_ID, "fill-color-transition", {
+            duration: 120,
+            delay: 0,
+          });
+          map.setPaintProperty(JOB_LINE_LAYER_ID, "line-opacity-transition", {
+            duration: 120,
+            delay: 0,
+          });
+          map.setPaintProperty(JOB_LINE_LAYER_ID, "line-color-transition", {
+            duration: 120,
+            delay: 0,
+          });
+        };
         map.addLayer({
           id: JOB_FILL_LAYER_ID,
           type: "fill",
@@ -1221,6 +1239,7 @@
             "line-width": 2,
           },
         });
+        applyTransitions();
       }
 
       function initializeOverlaySources() {
@@ -1260,6 +1279,34 @@
             },
             filter: ["==", ["get", "parcelId"], ""],
           });
+          map.setPaintProperty(PARCEL_FILL_LAYER_ID, "fill-opacity-transition", {
+            duration: 120,
+            delay: 0,
+          });
+          map.setPaintProperty(PARCEL_FILL_LAYER_ID, "fill-color-transition", {
+            duration: 120,
+            delay: 0,
+          });
+          map.setPaintProperty(
+            PARCEL_BOUNDARY_LAYER_ID,
+            "line-opacity-transition",
+            { duration: 120, delay: 0 },
+          );
+          map.setPaintProperty(
+            PARCEL_BOUNDARY_LAYER_ID,
+            "line-color-transition",
+            { duration: 120, delay: 0 },
+          );
+          map.setPaintProperty(
+            PARCEL_BOUNDARY_SELECTED_LAYER_ID,
+            "line-opacity-transition",
+            { duration: 120, delay: 0 },
+          );
+          map.setPaintProperty(
+            PARCEL_BOUNDARY_SELECTED_LAYER_ID,
+            "line-color-transition",
+            { duration: 120, delay: 0 },
+          );
           if (!appState.parcelLayerHandlersBound) {
             map.on("click", PARCEL_FILL_LAYER_ID, handleParcelFeatureClick);
             map.on("mouseenter", PARCEL_FILL_LAYER_ID, () => {
@@ -1284,6 +1331,14 @@
               "fill-color": "#a21caf",
               "fill-opacity": 0.25,
             },
+          });
+          map.setPaintProperty(SHADOW_LAYER_ID, "fill-opacity-transition", {
+            duration: 120,
+            delay: 0,
+          });
+          map.setPaintProperty(SHADOW_LAYER_ID, "fill-color-transition", {
+            duration: 120,
+            delay: 0,
           });
         }
         if (!map.getSource(PLACEMENT_SOURCE_ID)) {
@@ -1311,6 +1366,19 @@
               "fill-outline-color": "#1f2937",
             },
           });
+          map.setPaintProperty(PLACEMENT_LAYER_ID, "fill-opacity-transition", {
+            duration: 120,
+            delay: 0,
+          });
+          map.setPaintProperty(PLACEMENT_LAYER_ID, "fill-color-transition", {
+            duration: 120,
+            delay: 0,
+          });
+          map.setPaintProperty(
+            PLACEMENT_LAYER_ID,
+            "fill-outline-color-transition",
+            { duration: 120, delay: 0 },
+          );
         }
         if (!map.getSource(PLACEMENT_LABEL_SOURCE_ID)) {
           map.addSource(PLACEMENT_LABEL_SOURCE_ID, {
@@ -1337,6 +1405,16 @@
               "text-halo-width": 1,
             },
           });
+          map.setPaintProperty(
+            PLACEMENT_LABEL_LAYER_ID,
+            "text-opacity-transition",
+            { duration: 120, delay: 0 },
+          );
+          map.setPaintProperty(
+            PLACEMENT_LABEL_LAYER_ID,
+            "text-color-transition",
+            { duration: 120, delay: 0 },
+          );
         }
       }
 
@@ -2386,13 +2464,12 @@
         const config = {
           target_lat: lngLat.lat,
           target_lon: lngLat.lng,
-          cycles: 10,
-          parcel_workers: 4,
-          score_workers: 8,
+          cycles: 6,
+          parcel_workers: 3,
+          score_workers: 6,
           rotation_step: 90,
-          full_rotation: false,
-          buffer: 20,
-          setback: 5,
+          buffer: 100,
+          setback: 10,
           auto_front: true,
           front_angle: null,
           auto_offset: true,

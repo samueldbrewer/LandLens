@@ -1153,10 +1153,15 @@
         }
 
         setStatus("Initializing map...");
+        const desktopCenter = [-84.44226, 33.74701];
+        const mobileCenter = [-84.386, 33.749];
+        const initialCenter = document.body.classList.contains("mobile-mode")
+          ? mobileCenter
+          : desktopCenter;
         map = new maplibregl.Map({
           container: "map",
           style: styleJSON,
-          center: [-84.386, 33.749],
+          center: initialCenter,
           zoom: 11,
         });
 
